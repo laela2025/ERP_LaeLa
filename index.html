@@ -14,6 +14,34 @@
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
+    <!-- Login Authentication Screen -->
+    <div class="login-screen" id="login-container" style="display: none;">
+        <div class="login-card">
+            <div class="login-brand">
+                <div class="login-logo">L</div>
+                <h2>LaeLa Kids Wear</h2>
+                <p>Store ERP Management System</p>
+            </div>
+            <form id="login-form" onsubmit="handleERPLogin(event)">
+                <div class="form-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" class="form-control" id="login-username" placeholder="Enter username" required autocomplete="username">
+                </div>
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label for="login-password">Password</label>
+                    <input type="password" class="form-control" id="login-password" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+                <div id="login-error-msg" style="color: var(--danger); font-size: 0.85rem; margin-bottom: 16px; display: none; text-align: center;">
+                    <i class="fa-solid fa-circle-exclamation"></i> Invalid username or password!
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
+                    <i class="fa-solid fa-right-to-bracket"></i> Authenticate & Enter
+                </button>
+            </form>
+
+        </div>
+    </div>
+
     <div class="app-container">
         
         <!-- Sidebar Navigation -->
@@ -25,55 +53,66 @@
             
             <ul class="sidebar-menu">
                 <li>
-                    <a class="menu-item active" onclick="switchTab('dashboard')">
+                    <a class="menu-item active" onclick="switchTab('dashboard')" id="menu-dashboard">
                         <i class="fa-solid fa-chart-pie"></i>
                         <span>Dashboard</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('stock')">
+                    <a class="menu-item" onclick="switchTab('stock')" id="menu-stock">
                         <i class="fa-solid fa-boxes-stacked"></i>
                         <span>Stock Manager</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('billing')">
+                    <a class="menu-item" onclick="switchTab('billing')" id="menu-billing">
                         <i class="fa-solid fa-cash-register"></i>
                         <span>Billing (POS)</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('expenses')">
+                    <a class="menu-item" onclick="switchTab('expenses')" id="menu-expenses">
                         <i class="fa-solid fa-receipt"></i>
                         <span>Expenses Tracker</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('tags')">
+                    <a class="menu-item" onclick="switchTab('tags')" id="menu-tags">
                         <i class="fa-solid fa-tags"></i>
                         <span>MRP Tag Generator</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('reports')">
+                    <a class="menu-item" onclick="switchTab('reports')" id="menu-reports">
                         <i class="fa-solid fa-file-invoice-dollar"></i>
                         <span>Reports Panel</span>
                     </a>
                 </li>
                 <li>
-                    <a class="menu-item" onclick="switchTab('settings')">
+                    <a class="menu-item" onclick="switchTab('settings')" id="menu-settings">
                         <i class="fa-solid fa-gears"></i>
                         <span>Settings & Backup</span>
                     </a>
                 </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('users')" id="menu-users">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>User Manager</span>
+                    </a>
+                </li>
             </ul>
             
-            <div class="sidebar-footer">
-                <i class="fa-solid fa-circle-user"></i>
-                <div>
-                    <strong>LaeLa ERP</strong>
-                    <div style="font-size: 0.75rem;">Store Admin</div>
+            <div class="sidebar-footer" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fa-solid fa-circle-user" style="font-size: 1.25rem; color: var(--primary);"></i>
+                    <div>
+                        <strong>LaeLa ERP</strong>
+                        <div style="font-size: 0.75rem;">Store Admin</div>
+                    </div>
                 </div>
+                <button class="btn btn-secondary btn-icon btn-sm" onclick="handleERPLogout()" title="Lock Terminal" style="border-radius: 6px; width: 30px; height: 30px; border-color: rgba(255,255,255,0.05); color: var(--text-secondary);">
+                    <i class="fa-solid fa-lock" style="font-size: 0.75rem;"></i>
+                </button>
             </div>
         </aside>
 
@@ -699,6 +738,36 @@
                         <button class="btn btn-danger" onclick="resetERPDatabase()">
                             <i class="fa-solid fa-trash-arrow-up"></i> Reset All Data
                         </button>
+                </section>
+
+                <!-- 8. USER MANAGEMENT VIEW -->
+                <section id="users" class="tab-view">
+                    <div class="card">
+                        <div class="table-header-row">
+                            <div class="table-search-bar">
+                                <input type="text" class="form-control" id="users-search-input" placeholder="Search by name or username..." oninput="renderUsersTable()">
+                            </div>
+                            <button class="btn btn-primary" onclick="openAddUserModal()">
+                                <i class="fa-solid fa-user-plus"></i> Add New User
+                            </button>
+                        </div>
+                        
+                        <div class="table-container">
+                            <table class="app-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Username</th>
+                                        <th>Role Permission</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-tbody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </section>
 
@@ -872,6 +941,54 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeCategoriesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div class="modal-overlay" id="user-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="user-modal-title">Create New ERP User</h3>
+                <button class="modal-close" onclick="closeUserModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="user-form" onsubmit="saveUser(event)">
+                    <input type="hidden" id="user-id-field">
+                    <div class="form-group">
+                        <label for="user-fullname">Full Name</label>
+                        <input type="text" class="form-control" id="user-fullname" placeholder="e.g. John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-username">Username (For Login)</label>
+                        <input type="text" class="form-control" id="user-username" placeholder="e.g. johnd" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-password">Password</label>
+                        <input type="password" class="form-control" id="user-password" placeholder="Enter password" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="user-role">Role Permission</label>
+                            <select class="form-control" id="user-role" required>
+                                <option value="Admin">Admin (Full Control)</option>
+                                <option value="Manager">Manager (No settings/reports)</option>
+                                <option value="Cashier">Cashier (POS & sticker tags only)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="user-status">Account Status</label>
+                            <select class="form-control" id="user-status" required>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="padding:16px 0 0 0; border:none; background:none;">
+                        <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save User</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

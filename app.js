@@ -4,7 +4,8 @@ let state = {
     sales: [],
     expenses: [],
     purchases: [],
-    categories: []
+    categories: [],
+    users: []
 };
 
 // Seed Mock Data if LocalStorage is empty
@@ -66,7 +67,12 @@ const SEED_DATA = {
         { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", notes: "Instagram Kids Wear Ad Boost" },
         { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", notes: "Delivery cardboard box purchase (50 units)" }
     ],
-    categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"]
+    categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
+    users: [
+        { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
+        { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
+        { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
+    ]
 };
 
 // Local storage logic
@@ -77,6 +83,14 @@ function loadState() {
             state = JSON.parse(raw);
             if (!state.categories || state.categories.length === 0) {
                 state.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
+                saveState();
+            }
+            if (!state.users || state.users.length === 0) {
+                state.users = [
+                    { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
+                    { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
+                    { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
+                ];
                 saveState();
             }
         } catch (e) {
@@ -97,6 +111,17 @@ function saveState() {
 // Router & Switching Tabs
 let activeTab = "dashboard";
 function switchTab(tabId) {
+    // Role-based restrictions check
+    const role = sessionStorage.getItem("laela_erp_active_role") || "Cashier";
+    if (role === "Cashier" && (tabId === "dashboard" || tabId === "stock" || tabId === "expenses" || tabId === "reports" || tabId === "settings" || tabId === "users")) {
+        alert("Access Denied: Cashier accounts do not have permission to view this panel.");
+        return;
+    }
+    if (role === "Manager" && (tabId === "reports" || tabId === "settings" || tabId === "users")) {
+        alert("Access Denied: Manager accounts do not have permission to view this panel.");
+        return;
+    }
+
     activeTab = tabId;
     
     // Toggle active menu class
@@ -126,7 +151,8 @@ function switchTab(tabId) {
         expenses: "Store Operating Expenses",
         tags: "MRP Tag Barcode Generator",
         reports: "Financial Reports & Business Health",
-        settings: "Settings & Database Management"
+        settings: "Settings & Database Management",
+        users: "User Permissions & Roles Management"
     };
     document.getElementById("active-tab-title").innerText = titles[tabId];
 
@@ -148,6 +174,8 @@ function switchTab(tabId) {
     } else if (tabId === "reports") {
         initReportDates();
         runFinancialReports();
+    } else if (tabId === "users") {
+        renderUsersTable();
     }
 }
 
@@ -1739,6 +1767,274 @@ function resetERPDatabase() {
 }
 
 // ==========================================
+// USER LOGIN & SECURITY SESSIONS
+// ==========================================
+function checkLoginState() {
+    const loggedIn = sessionStorage.getItem("laela_erp_logged_in");
+    const appContainer = document.querySelector(".app-container");
+    const loginContainer = document.getElementById("login-container");
+
+    if (loggedIn === "true") {
+        appContainer.style.display = "flex";
+        loginContainer.style.display = "none";
+
+        // Dynamically adjust sidebar based on user role
+        const role = sessionStorage.getItem("laela_erp_active_role") || "Cashier";
+        const fullName = sessionStorage.getItem("laela_erp_active_fullname") || "Store Admin";
+        
+        // Update user badge in sidebar footer
+        const footerUserBadge = document.querySelector(".sidebar-footer div div");
+        if (footerUserBadge) {
+            footerUserBadge.innerHTML = `
+                <strong>${fullName}</strong>
+                <div style="font-size: 0.75rem;">${role}</div>
+            `;
+        }
+
+        // Show/hide menu items based on role permissions
+        const menuDashboard = document.getElementById("menu-dashboard");
+        const menuStock = document.getElementById("menu-stock");
+        const menuBilling = document.getElementById("menu-billing");
+        const menuExpenses = document.getElementById("menu-expenses");
+        const menuTags = document.getElementById("menu-tags");
+        const menuReports = document.getElementById("menu-reports");
+        const menuSettings = document.getElementById("menu-settings");
+        const menuUsers = document.getElementById("menu-users");
+
+        if (menuDashboard) menuDashboard.parentElement.style.display = (role === "Admin" || role === "Manager") ? "block" : "none";
+        if (menuStock) menuStock.parentElement.style.display = (role === "Admin" || role === "Manager") ? "block" : "none";
+        if (menuBilling) menuBilling.parentElement.style.display = "block"; // Always visible
+        if (menuExpenses) menuExpenses.parentElement.style.display = (role === "Admin" || role === "Manager") ? "block" : "none";
+        if (menuTags) menuTags.parentElement.style.display = "block"; // Always visible
+        if (menuReports) menuReports.parentElement.style.display = (role === "Admin") ? "block" : "none";
+        if (menuSettings) menuSettings.parentElement.style.display = (role === "Admin") ? "block" : "none";
+        if (menuUsers) menuUsers.parentElement.style.display = (role === "Admin") ? "block" : "none";
+
+    } else {
+        appContainer.style.display = "none";
+        loginContainer.style.display = "flex";
+        
+        // Hide login error on clean loads
+        const errorMsg = document.getElementById("login-error-msg");
+        if (errorMsg) errorMsg.style.display = "none";
+    }
+}
+
+function handleERPLogin(event) {
+    event.preventDefault();
+    const u = document.getElementById("login-username").value.trim();
+    const p = document.getElementById("login-password").value;
+    const errorMsg = document.getElementById("login-error-msg");
+
+    // Scan state.users for valid matching active credentials
+    const user = state.users.find(user => user.username === u && user.password === p);
+    if (user) {
+        if (user.status !== "Active") {
+            errorMsg.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Account is inactive!';
+            errorMsg.style.display = "block";
+            return;
+        }
+        errorMsg.style.display = "none";
+        sessionStorage.setItem("laela_erp_logged_in", "true");
+        sessionStorage.setItem("laela_erp_active_user", user.username);
+        sessionStorage.setItem("laela_erp_active_fullname", user.name);
+        sessionStorage.setItem("laela_erp_active_role", user.role);
+        
+        checkLoginState();
+        
+        // Redirect depending on user role
+        if (user.role === "Cashier") {
+            switchTab("billing");
+        } else {
+            switchTab("dashboard");
+        }
+        
+        document.getElementById("login-form").reset();
+    } else {
+        errorMsg.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Invalid username or password!';
+        errorMsg.style.display = "block";
+    }
+}
+
+function handleERPLogout() {
+    if (confirm("Are you sure you want to lock the ERP terminal and logout?")) {
+        sessionStorage.removeItem("laela_erp_logged_in");
+        sessionStorage.removeItem("laela_erp_active_user");
+        sessionStorage.removeItem("laela_erp_active_fullname");
+        sessionStorage.removeItem("laela_erp_active_role");
+        checkLoginState();
+    }
+}
+
+// ==========================================
+// USER CREATION & MANAGEMENT CRUD
+// ==========================================
+function renderUsersTable() {
+    const q = document.getElementById("users-search-input").value.toLowerCase().trim();
+    const tbody = document.getElementById("users-table-tbody");
+    tbody.innerHTML = "";
+
+    const filtered = state.users.filter(u => {
+        return u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 30px; color:var(--text-muted);">No users found matching filters.</td></tr>`;
+        return;
+    }
+
+    filtered.forEach(u => {
+        let roleBadge = `<span class="badge badge-info">${u.role}</span>`;
+        if (u.role === "Admin") {
+            roleBadge = `<span class="badge badge-danger">${u.role}</span>`;
+        } else if (u.role === "Manager") {
+            roleBadge = `<span class="badge badge-warning">${u.role}</span>`;
+        }
+
+        const statusBadge = u.status === "Active" 
+            ? `<span class="badge badge-success">${u.status}</span>` 
+            : `<span class="badge badge-secondary">${u.status}</span>`;
+
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${u.name}</strong></td>
+                <td><code>${u.username}</code></td>
+                <td>${roleBadge}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditUserModal('${u.id}')" title="Edit User">
+                            <i class="fa-solid fa-user-pen" style="font-size:0.75rem;"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser('${u.id}')" title="Delete User">
+                            <i class="fa-solid fa-user-minus" style="font-size:0.75rem;"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function openAddUserModal() {
+    document.getElementById("user-modal-title").innerText = "Create New ERP User";
+    document.getElementById("user-form").reset();
+    document.getElementById("user-id-field").value = "";
+    document.getElementById("user-username").disabled = false;
+    document.getElementById("user-password").required = true;
+    document.getElementById("user-password").placeholder = "Enter password";
+    document.getElementById("user-modal").classList.add("active");
+}
+
+function openEditUserModal(id) {
+    const u = state.users.find(user => user.id === id);
+    if (!u) return;
+
+    document.getElementById("user-modal-title").innerText = "Edit User Details";
+    document.getElementById("user-id-field").value = u.id;
+    document.getElementById("user-fullname").value = u.name;
+    document.getElementById("user-username").value = u.username;
+    document.getElementById("user-username").disabled = true; // Username cannot be changed
+    document.getElementById("user-password").value = u.password;
+    document.getElementById("user-password").required = true;
+    document.getElementById("user-role").value = u.role;
+    document.getElementById("user-status").value = u.status;
+    document.getElementById("user-modal").classList.add("active");
+}
+
+function closeUserModal() {
+    document.getElementById("user-modal").classList.remove("active");
+}
+
+function saveUser(event) {
+    event.preventDefault();
+    const id = document.getElementById("user-id-field").value;
+    const name = document.getElementById("user-fullname").value.trim();
+    const username = document.getElementById("user-username").value.trim().toLowerCase();
+    const password = document.getElementById("user-password").value;
+    const role = document.getElementById("user-role").value;
+    const status = document.getElementById("user-status").value;
+
+    const currentActiveUsername = sessionStorage.getItem("laela_erp_active_user");
+
+    // Self-modification protection checks if editing
+    if (id !== "") {
+        const editingUser = state.users.find(u => u.id === id);
+        if (editingUser && editingUser.username === currentActiveUsername) {
+            // Check status deactivation
+            if (status !== "Active") {
+                alert("Error: You cannot deactivate your own active session!");
+                return;
+            }
+            // Check role demotion
+            if (editingUser.role === "Admin" && role !== "Admin") {
+                alert("Error: You cannot demote your own user role! Another Admin must perform this action.");
+                return;
+            }
+        }
+    }
+
+    if (id === "") {
+        // Add User
+        // Check duplicate username
+        if (state.users.some(u => u.username === username)) {
+            alert("Error: A user with this username already exists!");
+            return;
+        }
+
+        const newId = "u_" + Date.now();
+        state.users.push({
+            id: newId,
+            name,
+            username,
+            password,
+            role,
+            status
+        });
+    } else {
+        // Edit User
+        const index = state.users.findIndex(u => u.id === id);
+        if (index !== -1) {
+            // Update details
+            state.users[index].name = name;
+            state.users[index].password = password;
+            state.users[index].role = role;
+            state.users[index].status = status;
+
+            // If updating currently logged-in user, refresh their session variables
+            if (state.users[index].username === currentActiveUsername) {
+                sessionStorage.setItem("laela_erp_active_fullname", name);
+                sessionStorage.setItem("laela_erp_active_role", role);
+                checkLoginState();
+            }
+        }
+    }
+
+    saveState();
+    closeUserModal();
+    renderUsersTable();
+}
+
+function deleteUser(id) {
+    const user = state.users.find(u => u.id === id);
+    if (!user) return;
+
+    const currentActiveUsername = sessionStorage.getItem("laela_erp_active_user");
+
+    // Protection check
+    if (user.username === currentActiveUsername) {
+        alert("Error: You cannot delete your own active user account!");
+        return;
+    }
+
+    if (confirm(`Are you sure you want to delete user "${user.name}" (${user.username})?`)) {
+        state.users = state.users.filter(u => u.id !== id);
+        saveState();
+        renderUsersTable();
+    }
+}
+
+// ==========================================
 // APPLICATION LAUNCH AND INIT
 // ==========================================
 window.onload = function() {
@@ -1753,6 +2049,9 @@ window.onload = function() {
 
     // Load Local Storage
     loadState();
+
+    // Check Login Session
+    checkLoginState();
 
     // Populate category dropdowns
     populateCategoryDropdowns();

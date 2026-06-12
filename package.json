@@ -1,0 +1,11 @@
+{
+  "name": "laela-kids-wear-erp",
+  "version": "1.0.0",
+  "description": "Premium ERP for LaeLa Kids Wear store",
+  "scripts": {
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}

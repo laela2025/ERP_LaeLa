@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaeLa Kids Wear - ERP Store Management System</title>
+    <!-- CSS File Link -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- ChartJS via CDN for Dashboard & Reports Graphics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- JsBarcode via CDN for Barcode generation -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="sidebar-logo">L</div>
+                <div class="brand-text">LaeLa Kids</div>
+            </div>
+            
+            <ul class="sidebar-menu">
+                <li>
+                    <a class="menu-item active" onclick="switchTab('dashboard')">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('stock')">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Stock Manager</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('billing')">
+                        <i class="fa-solid fa-cash-register"></i>
+                        <span>Billing (POS)</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('expenses')">
+                        <i class="fa-solid fa-receipt"></i>
+                        <span>Expenses Tracker</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('tags')">
+                        <i class="fa-solid fa-tags"></i>
+                        <span>MRP Tag Generator</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('reports')">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>Reports Panel</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="menu-item" onclick="switchTab('settings')">
+                        <i class="fa-solid fa-gears"></i>
+                        <span>Settings & Backup</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <i class="fa-solid fa-circle-user"></i>
+                <div>
+                    <strong>LaeLa ERP</strong>
+                    <div style="font-size: 0.75rem;">Store Admin</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            
+            <!-- Header Nav -->
+            <header class="header-nav">
+                <div class="header-title">
+                    <h1 id="active-tab-title">Dashboard</h1>
+                </div>
+                <div class="header-actions">
+                    <span class="date-indicator" id="current-date">June 12, 2026</span>
+                </div>
+            </header>
+
+            <!-- Dashboard Content Container -->
+            <div class="content-body">
+                
+                <!-- 1. DASHBOARD VIEW -->
+                <section id="dashboard" class="tab-view active">
+                    <div class="stats-grid">
+                        <div class="card stat-card">
+                            <div class="stat-info">
+                                <div class="stat-label">Total Revenue</div>
+                                <div class="stat-value text-primary" id="dash-revenue">₹0.00</div>
+                            </div>
+                            <div class="stat-icon sales">
+                                <i class="fa-solid fa-indian-rupee-sign"></i>
+                            </div>
+                        </div>
+                        <div class="card stat-card">
+                            <div class="stat-info">
+                                <div class="stat-label">Total Expenses</div>
+                                <div class="stat-value" id="dash-expenses" style="color: var(--warning);">₹0.00</div>
+                            </div>
+                            <div class="stat-icon expenses">
+                                <i class="fa-solid fa-wallet"></i>
+                            </div>
+                        </div>
+                        <div class="card stat-card">
+                            <div class="stat-info">
+                                <div class="stat-label">Net Profit</div>
+                                <div class="stat-value" id="dash-profit" style="color: var(--secondary);">₹0.00</div>
+                            </div>
+                            <div class="stat-icon profit">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                        </div>
+                        <div class="card stat-card">
+                            <div class="stat-info">
+                                <div class="stat-label">Active Stock Valuation</div>
+                                <div class="stat-value" id="dash-stock-value" style="color: var(--accent);">₹0.00</div>
+                            </div>
+                            <div class="stat-icon stock">
+                                <i class="fa-solid fa-warehouse"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="charts-row">
+                        <div class="card">
+                            <h3 style="margin-bottom: 16px;">Sales vs Purchases Trend</h3>
+                            <div class="chart-container">
+                                <canvas id="salesExpensesChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3 style="margin-bottom: 16px;">Stock Status</h3>
+                            <div class="chart-container">
+                                <canvas id="stockCategoriesChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-sections">
+                        <div class="card">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                <h3>Low Stock Alerts</h3>
+                                <span class="badge badge-danger" id="low-stock-count-badge">0 items</span>
+                            </div>
+                            <div class="table-container" style="max-height: 250px;">
+                                <table class="app-table">
+                                    <thead>
+                                        <tr>
+                                            <th>SKU</th>
+                                            <th>Product Name</th>
+                                            <th>Size</th>
+                                            <th>Stock</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dash-low-stock-tbody">
+                                        <!-- Dynamic items -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3>Recent Sales Transactions</h3>
+                            <div class="table-container" style="max-height: 250px; margin-top: 16px;">
+                                <table class="app-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice</th>
+                                            <th>Date</th>
+                                            <th>Items</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dash-recent-sales-tbody">
+                                        <!-- Dynamic items -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. STOCK MANAGER VIEW -->
+                <section id="stock" class="tab-view">
+                    <div class="card">
+                        <div class="table-header-row">
+                            <div class="table-search-bar">
+                                <input type="text" class="form-control" id="stock-search-input" placeholder="Search by name, SKU or size..." oninput="renderStockTable()">
+                                <select class="form-control" id="stock-category-filter" style="width: 150px;" onchange="renderStockTable()">
+                                    <option value="">All Categories</option>
+                                    <!-- Dynamic categories -->
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="btn btn-secondary" onclick="openCategoriesModal()">
+                                    <i class="fa-solid fa-folder-open"></i> Manage Categories
+                                </button>
+                                <button class="btn btn-secondary" onclick="openStockInwardModal()">
+                                    <i class="fa-solid fa-plus-circle"></i> Inward Stock
+                                </button>
+                                <button class="btn btn-primary" onclick="openAddProductModal()">
+                                    <i class="fa-solid fa-circle-plus"></i> Add New Product
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-container">
+                            <table class="app-table">
+                                <thead>
+                                    <tr>
+                                        <th>SKU</th>
+                                        <th>Product Name</th>
+                                        <th>Category</th>
+                                        <th>Size</th>
+                                        <th>Cost Price</th>
+                                        <th>Selling Price (MRP)</th>
+                                        <th>In Stock</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stock-table-tbody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. BILLING (POS) VIEW -->
+                <section id="billing" class="tab-view">
+                    <div class="pos-layout">
+                        
+                        <!-- Product Selection Panel -->
+                        <div class="pos-products">
+                            <div class="pos-categories" id="pos-category-container">
+                                <button class="pos-cat-btn active" onclick="filterPOSProducts('')">All Products</button>
+                                <!-- Dynamic category pills -->
+                            </div>
+                            
+                            <div style="margin-bottom: 16px;">
+                                <input type="text" class="form-control" id="pos-search-input" placeholder="Scan barcode, enter SKU or search name..." oninput="handlePOSSearch(event)">
+                            </div>
+                            
+                            <div class="pos-products-grid" id="pos-products-grid">
+                                <!-- Dynamic products -->
+                            </div>
+                        </div>
+
+                        <!-- Current Billing Cart -->
+                        <div class="pos-cart">
+                            <div class="pos-cart-header">
+                                <h3>Active Cart</h3>
+                                <button class="btn btn-secondary btn-sm" onclick="clearPOSCart()">Clear All</button>
+                            </div>
+                            
+                            <div class="pos-cart-items" id="pos-cart-items-container">
+                                <!-- Dynamic cart items -->
+                            </div>
+                            
+                            <div class="pos-cart-summary">
+                                <div class="form-group">
+                                    <label>Customer Name (Optional)</label>
+                                    <input type="text" class="form-control" id="pos-customer-name" placeholder="Walk-in Customer">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Discount Type</label>
+                                        <select class="form-control" id="pos-discount-type" onchange="updateCartTotals()">
+                                            <option value="none">No Discount</option>
+                                            <option value="percent">Percentage (%)</option>
+                                            <option value="flat">Flat Price (₹)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Discount Value</label>
+                                        <input type="number" class="form-control" id="pos-discount-val" value="0" min="0" oninput="updateCartTotals()">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Tax Option (GST)</label>
+                                        <select class="form-control" id="pos-tax-rate" onchange="updateCartTotals()">
+                                            <option value="0">No Tax (0%)</option>
+                                            <option value="0.05">GST 5%</option>
+                                            <option value="0.12" selected>GST 12%</option>
+                                            <option value="0.18">GST 18%</option>
+                                            <option value="0.28">GST 28%</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="summary-row">
+                                    <span>Subtotal:</span>
+                                    <span id="cart-subtotal">₹0.00</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span>Discount Deducted:</span>
+                                    <span id="cart-discount-deducted">-₹0.00</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span>Tax / GST:</span>
+                                    <span id="cart-tax">₹0.00</span>
+                                </div>
+                                
+                                <div class="summary-row total">
+                                    <span>Grand Total:</span>
+                                    <span class="total-amount" id="cart-grand-total">₹0.00</span>
+                                </div>
+                                
+                                <div class="cart-checkout-actions">
+                                    <button class="btn btn-primary" onclick="processPOSCheckout()">
+                                        <i class="fa-solid fa-file-invoice-dollar"></i> Checkout & Print Bill
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. EXPENSES TRACKER VIEW -->
+                <section id="expenses" class="tab-view">
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px;">
+                        
+                        <!-- Left Panel: Log New Expense -->
+                        <div class="card">
+                            <h3 style="margin-bottom: 20px;">Log Store Expense</h3>
+                            <form id="expense-form" onsubmit="saveExpense(event)">
+                                <div class="form-group">
+                                    <label for="expense-date">Expense Date</label>
+                                    <input type="date" class="form-control" id="expense-date" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="expense-amount">Amount (₹)</label>
+                                    <input type="number" step="0.01" class="form-control" id="expense-amount" placeholder="0.00" min="0.01" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="expense-category">Category</label>
+                                    <select class="form-control" id="expense-category" required>
+                                        <option value="">Select Category</option>
+                                        <option value="Rent">Shop Rent</option>
+                                        <option value="Salaries">Staff Salaries</option>
+                                        <option value="Utilities">Utilities & Bills (Electricity, Internet)</option>
+                                        <option value="Marketing">Marketing & Advertising</option>
+                                        <option value="Packaging">Shipping & Packaging</option>
+                                        <option value="Repairs">Repairs & Maintenance</option>
+                                        <option value="Other">Other Miscellaneous</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="expense-notes">Notes / Details</label>
+                                    <textarea class="form-control" id="expense-notes" rows="3" placeholder="Enter expense description..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                    <i class="fa-solid fa-plus-circle"></i> Add Expense
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Right Panel: Expenses History List -->
+                        <div class="card">
+                            <h3 style="margin-bottom: 20px;">Expense Log History</h3>
+                            <div class="table-container">
+                                <table class="app-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Category</th>
+                                            <th>Description</th>
+                                            <th>Amount</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="expenses-table-tbody">
+                                        <!-- Dynamic items -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. MRP TAG GENERATOR VIEW -->
+                <section id="tags" class="tab-view">
+                    <div class="tag-config-grid">
+                        
+                        <!-- Configuration Panel -->
+                        <div class="card">
+                            <h3 style="margin-bottom: 16px;">MRP Tag Settings</h3>
+                            <div class="form-group">
+                                <label>Store Title</label>
+                                <input type="text" class="form-control" id="tag-store-name" value="LaeLa Kids Wear" oninput="updateLiveTagPreview()">
+                            </div>
+                            <div class="form-group">
+                                <label>Store Phone/Contact</label>
+                                <input type="text" class="form-control" id="tag-store-phone" value="Ph: +91 9876543210" oninput="updateLiveTagPreview()">
+                            </div>
+                            <div class="form-group">
+                                <label>Sticker Sheet Grid Columns</label>
+                                <select class="form-control" id="tag-columns">
+                                    <option value="3">3 Columns (Standard Sticker sheet)</option>
+                                    <option value="4">4 Columns (Dense sticker sheet)</option>
+                                </select>
+                            </div>
+                            
+                            <h4 style="margin-top: 20px; margin-bottom: 12px; font-size: 0.9rem;">Toggle Printable Items</h4>
+                            <div class="form-group" style="display:flex; flex-direction:column; gap:8px;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tag-show-store" checked onchange="updateLiveTagPreview()"> Show Store Title
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tag-show-sku" checked onchange="updateLiveTagPreview()"> Show SKU
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tag-show-size" checked onchange="updateLiveTagPreview()"> Show Size
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="tag-show-barcode" checked onchange="updateLiveTagPreview()"> Show Barcode
+                                </label>
+                            </div>
+
+                            <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" onclick="printStickerSheet()">
+                                <i class="fa-solid fa-print"></i> Generate & Print Sheets
+                            </button>
+                        </div>
+
+                        <!-- Products Selector list and Live Preview -->
+                        <div style="display:flex; flex-direction:column; gap:24px;">
+                            <div class="card" style="margin-bottom:0;">
+                                <h3>1. Select Products & Print Quantities</h3>
+                                <div class="table-container" style="max-height: 250px; margin-top: 16px;">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th width="40"><input type="checkbox" id="tag-select-all-checkbox" onchange="toggleSelectAllTags(this)"></th>
+                                                <th>Product</th>
+                                                <th>SKU</th>
+                                                <th>Size</th>
+                                                <th>MRP (Price)</th>
+                                                <th width="100">Print Qty</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tag-products-selection-tbody">
+                                            <!-- Dynamic items -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <h3>2. Live Tag Preview</h3>
+                                <div class="tag-preview-container">
+                                    <div class="mrp-tag" id="live-tag-preview-card">
+                                        <div class="mrp-tag-store" id="preview-store-name">LaeLa Kids Wear</div>
+                                        <div class="mrp-tag-title" id="preview-prod-name">Baby Denim dungaree</div>
+                                        <div class="mrp-tag-row">
+                                            <span id="preview-sku">SKU: LAKD-1029</span>
+                                            <span id="preview-size">Size: 2-3Y</span>
+                                        </div>
+                                        <div class="mrp-tag-mrp" id="preview-mrp">MRP: ₹999.00</div>
+                                        <svg class="mrp-tag-barcode" id="preview-barcode-svg"></svg>
+                                        <div style="font-size:0.55rem; color:#666;" id="preview-store-phone">Ph: +91 9876543210</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. REPORTS PANEL VIEW -->
+                <section id="reports" class="tab-view">
+                    <div class="reports-layout">
+                        <!-- Date & Category filters -->
+                        <div class="filters-panel">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Date Filter Presets</label>
+                                <select class="form-control" id="report-date-preset" style="width: 180px;" onchange="handlePresetDateChange()">
+                                    <option value="today">Today</option>
+                                    <option value="yesterday">Yesterday</option>
+                                    <option value="last7">Last 7 Days</option>
+                                    <option value="thismonth">This Month (June)</option>
+                                    <option value="custom">Custom Date Range</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="report-custom-start-group" style="margin-bottom:0; display:none;">
+                                <label>Start Date</label>
+                                <input type="date" class="form-control" id="report-start-date" onchange="runFinancialReports()">
+                            </div>
+                            <div class="form-group" id="report-custom-end-group" style="margin-bottom:0; display:none;">
+                                <label>End Date</label>
+                                <input type="date" class="form-control" id="report-end-date" onchange="runFinancialReports()">
+                            </div>
+                            <button class="btn btn-primary" onclick="runFinancialReports()">
+                                <i class="fa-solid fa-sync"></i> Refresh Reports
+                            </button>
+                        </div>
+
+                        <!-- Dashboard style stats just for the report segment -->
+                        <div class="card profit-summary-grid">
+                            <div class="profit-summary-card">
+                                <h4>Gross Sales Revenue</h4>
+                                <div class="val neutral" id="report-gross-sales">₹0.00</div>
+                            </div>
+                            <div class="profit-summary-card">
+                                <h4>Cost of Goods Sold (COGS)</h4>
+                                <div class="val" id="report-cogs" style="color: var(--accent);">₹0.00</div>
+                            </div>
+                            <div class="profit-summary-card">
+                                <h4>Gross Margin Profit</h4>
+                                <div class="val positive" id="report-gross-profit">₹0.00</div>
+                            </div>
+                            <div class="profit-summary-card">
+                                <h4>Operating Expenses</h4>
+                                <div class="val" id="report-operating-expenses" style="color: var(--warning);">₹0.00</div>
+                            </div>
+                            <div class="profit-summary-card">
+                                <h4>Net Store Profit</h4>
+                                <div class="val" id="report-net-profit">₹0.00</div>
+                            </div>
+                            <div class="profit-summary-card">
+                                <h4>Net Profit Margin (%)</h4>
+                                <div class="val" id="report-profit-margin" style="color: var(--secondary);">0.0%</div>
+                            </div>
+                        </div>
+
+                        <!-- Report subtabs navigation -->
+                        <div>
+                            <div class="reports-tabs">
+                                <button class="report-tab-btn active" onclick="switchReportTab('stockstatus')">Stock Status Report</button>
+                                <button class="report-tab-btn" onclick="switchReportTab('sales')">Sales Log Report</button>
+                                <button class="report-tab-btn" onclick="switchReportTab('purchases')">Stock Purchase/Inward Report</button>
+                                <button class="report-tab-btn" onclick="switchReportTab('margins')">Product Margins & Profitability</button>
+                            </div>
+
+                            <!-- Stock Status Report -->
+                            <div class="card report-table-section active" id="report-stockstatus-section">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3>Real-Time Inventory Stock Status</h3>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportCSVReport('stockstatus')">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="table-container">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU</th>
+                                                <th>Product Name</th>
+                                                <th>Category</th>
+                                                <th>Size</th>
+                                                <th>In Stock</th>
+                                                <th>Unit Cost</th>
+                                                <th>Unit MRP</th>
+                                                <th>Total Cost Valuation</th>
+                                                <th>Total MRP Valuation</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="report-stockstatus-tbody">
+                                            <!-- Dynamic report lines -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Sales Report -->
+                            <div class="card report-table-section" id="report-sales-section">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3>Completed Sales Orders</h3>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportCSVReport('sales')">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="table-container">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Invoice #</th>
+                                                <th>Date & Time</th>
+                                                <th>Customer</th>
+                                                <th>Payment</th>
+                                                <th>Subtotal</th>
+                                                <th>Discount</th>
+                                                <th>Tax</th>
+                                                <th>Total Amount</th>
+                                                <th>COGS</th>
+                                                <th>Net Profit</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="report-sales-tbody">
+                                            <!-- Dynamic report lines -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Purchase/Stock Inward Report -->
+                            <div class="card report-table-section" id="report-purchases-section">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3>Stock Purchase & Inward Entries</h3>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportCSVReport('purchases')">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="table-container">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date & Time</th>
+                                                <th>SKU</th>
+                                                <th>Product Name</th>
+                                                <th>Size</th>
+                                                <th>Quantity Added</th>
+                                                <th>Unit Purchase Cost</th>
+                                                <th>Unit selling price (MRP)</th>
+                                                <th>Supplier/Note</th>
+                                                <th>Total Outlay</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="report-purchases-tbody">
+                                            <!-- Dynamic report lines -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Product Profit Margin Analysis Report -->
+                            <div class="card report-table-section" id="report-margins-section">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3>Profit Margin Breakdown by Product</h3>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportCSVReport('margins')">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="table-container">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU</th>
+                                                <th>Product Name</th>
+                                                <th>Category</th>
+                                                <th>Cost Price</th>
+                                                <th>Selling Price (MRP)</th>
+                                                <th>Sold Count</th>
+                                                <th>Sales Revenue</th>
+                                                <th>COGS</th>
+                                                <th>Gross Profit</th>
+                                                <th>Gross Margin %</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="report-margins-tbody">
+                                            <!-- Dynamic report lines -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7. SETTINGS & BACKUP VIEW -->
+                <section id="settings" class="tab-view">
+                    <div class="card" style="max-width: 600px;">
+                        <h3 style="margin-bottom: 20px;">Database Backup & Restoration</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.6;">
+                            Manage your ERP store database locally. You can download a complete backup of your stock inventory, sales transactions, purchase orders, expenses logs, and product categories as a JSON file, or restore a previous database backup.
+                        </p>
+                        
+                        <div style="display: flex; gap: 16px; margin-bottom: 32px;">
+                            <button class="btn btn-primary" onclick="exportBackup()">
+                                <i class="fa-solid fa-download"></i> Download Local Backup
+                            </button>
+                            <button class="btn btn-secondary" onclick="triggerImport()">
+                                <i class="fa-solid fa-upload"></i> Restore from Backup File
+                            </button>
+                            <input type="file" id="import-file-input" style="display: none;" onchange="importBackup(event)">
+                        </div>
+                        
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin-bottom: 24px;">
+                        
+                        <h4 style="margin-bottom: 12px; font-size: 1rem; color: var(--danger);">Danger Zone</h4>
+                        <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.85rem;">
+                            Resetting the database will delete all local products, categories, transactions, and expenses. Ensure you have exported a backup copy before proceeding.
+                        </p>
+                        <button class="btn btn-danger" onclick="resetERPDatabase()">
+                            <i class="fa-solid fa-trash-arrow-up"></i> Reset All Data
+                        </button>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL CONTAINERS -->
+
+    <!-- Add Product Modal -->
+    <div class="modal-overlay" id="product-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="product-modal-title">Add New Kids Wear Item</h3>
+                <button class="modal-close" onclick="closeProductModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="product-form" onsubmit="saveProduct(event)">
+                    <input type="hidden" id="prod-id-field">
+                    <div class="form-group">
+                        <label for="prod-name">Product Title</label>
+                        <input type="text" class="form-control" id="prod-name" placeholder="e.g. Cotton Dinosaur Jumpsuit" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="prod-sku">SKU Code</label>
+                            <input type="text" class="form-control" id="prod-sku" placeholder="LL-KID-100" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="prod-category">Category</label>
+                            <select class="form-control" id="prod-category" required>
+                                <!-- Dynamic categories -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="prod-size">Size Dimension</label>
+                            <select class="form-control" id="prod-size" required>
+                                <option value="0-3M">0-3 Months</option>
+                                <option value="3-6M">3-6 Months</option>
+                                <option value="6-12M">6-12 Months</option>
+                                <option value="12-18M">12-18 Months</option>
+                                <option value="18-24M">18-24 Months</option>
+                                <option value="2-3Y">2-3 Years</option>
+                                <option value="4-5Y">4-5 Years</option>
+                                <option value="6-7Y">6-7 Years</option>
+                                <option value="8-9Y">8-9 Years</option>
+                                <option value="One Size">One Size</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="prod-stock">Initial Stock Quantity</label>
+                            <input type="number" class="form-control" id="prod-stock" placeholder="0" min="0" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="prod-cost">Purchase Cost Price (₹)</label>
+                            <input type="number" step="0.01" class="form-control" id="prod-cost" placeholder="0.00" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="prod-price">Retail Selling Price / MRP (₹)</label>
+                            <input type="number" step="0.01" class="form-control" id="prod-price" placeholder="0.00" min="0" required>
+                        </div>
+                    </div>
+                    <div class="form-group" id="product-inward-log-note-group" style="display:none;">
+                        <label for="prod-supplier">Supplier Details (For Inward Purchase Log)</label>
+                        <input type="text" class="form-control" id="prod-supplier" placeholder="e.g. Kids wholesale supplier ltd">
+                    </div>
+                    <div class="modal-footer" style="padding:16px 0 0 0; border:none; background:none;">
+                        <button type="button" class="btn btn-secondary" onclick="closeProductModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Product</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Inward Modal -->
+    <div class="modal-overlay" id="stock-inward-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Stock Inward (Purchase Entry)</h3>
+                <button class="modal-close" onclick="closeStockInwardModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="stock-inward-form" onsubmit="saveStockInward(event)">
+                    <div class="form-group">
+                        <label for="inward-product-select">Select Product</label>
+                        <select class="form-control" id="inward-product-select" required>
+                            <!-- Dynamic options -->
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="inward-qty">Add Stock Quantity</label>
+                            <input type="number" class="form-control" id="inward-qty" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="inward-cost">Current Purchase Cost per Item (₹)</label>
+                            <input type="number" step="0.01" class="form-control" id="inward-cost" min="0.01" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="inward-supplier">Supplier / Reference details</label>
+                        <input type="text" class="form-control" id="inward-supplier" placeholder="e.g. Apex garment supplier Inc.">
+                    </div>
+                    <div class="modal-footer" style="padding:16px 0 0 0; border:none; background:none;">
+                        <button type="button" class="btn btn-secondary" onclick="closeStockInwardModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Log Stock Inward</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- POS Bill Invoice Receipt Modal -->
+    <div class="modal-overlay" id="receipt-modal">
+        <div class="modal-content" style="max-width: 380px;">
+            <div class="modal-header">
+                <h3>Invoice Receipt</h3>
+                <button class="modal-close" onclick="closeReceiptModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:12px; background:white;">
+                <div class="invoice-print-container" id="printable-receipt-card">
+                    <!-- Dynamic Receipt content generated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeReceiptModal()">Close</button>
+                <button class="btn btn-primary" onclick="window.print()">
+                    <i class="fa-solid fa-print"></i> Print Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Categories Modal -->
+    <div class="modal-overlay" id="categories-modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3>Manage Product Categories</h3>
+                <button class="modal-close" onclick="closeCategoriesModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="category-form" onsubmit="saveCategory(event)" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-end;">
+                    <div class="form-group" style="flex-grow: 1; margin-bottom: 0;">
+                        <label for="new-category-name">Add New Category</label>
+                        <input type="text" class="form-control" id="new-category-name" placeholder="e.g. Winter Jackets" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa-solid fa-plus"></i> Add
+                    </button>
+                </form>
+                
+                <h4 style="margin-bottom: 10px; font-size: 0.9rem; color: var(--text-secondary);">Existing Categories</h4>
+                <div class="table-container" style="max-height: 250px;">
+                    <table class="app-table">
+                        <thead>
+                            <tr>
+                                <th>Category Name</th>
+                                <th width="80" style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categories-list-tbody">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCategoriesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Printable sticker sheets container -->
+    <div id="print-stickers-container">
+        <!-- Generates sticker list dynamically for printing -->
+    </div>
+
+    <!-- App Logic File Link -->
+    <script src="app.js"></script>
+</body>
+</html>

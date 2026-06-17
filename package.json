@@ -2,10 +2,22 @@
   "name": "laela-kids-wear-erp",
   "version": "1.0.0",
   "description": "Premium ERP for LaeLa Kids Wear store",
+  "type": "module",
   "scripts": {
-    "dev": "vite"
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "client": "vite",
+    "server": "node server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "vite": "^5.2.0"
   }
 }

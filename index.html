@@ -15,7 +15,7 @@
 </head>
 <body>
     <!-- Login Authentication Screen -->
-    <div class="login-screen" id="login-container" style="display: none;">
+    <div class="login-screen" id="login-container">
         <div class="login-card">
             <div class="login-brand">
                 <div class="login-logo">L</div>
@@ -42,7 +42,7 @@
         </div>
     </div>
 
-    <div class="app-container">
+    <div class="app-container" style="display: none;">
         
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
@@ -715,8 +715,11 @@
                 <section id="settings" class="tab-view">
                     <div class="card" style="max-width: 600px;">
                         <h3 style="margin-bottom: 20px;">Database Backup & Restoration</h3>
+                        <p id="db-connection-status" style="margin-bottom: 16px; font-size: 0.9rem;">
+                            <span class="badge badge-secondary">Checking database...</span>
+                        </p>
                         <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.6;">
-                            Manage your ERP store database locally. You can download a complete backup of your stock inventory, sales transactions, purchase orders, expenses logs, and product categories as a JSON file, or restore a previous database backup.
+                            Store data is persisted in a local SQLite database when the API server is running. You can also download a complete backup of your stock inventory, sales transactions, purchase orders, expenses logs, and product categories as a JSON file, or restore a previous database backup.
                         </p>
                         
                         <div style="display: flex; gap: 16px; margin-bottom: 32px;">

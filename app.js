@@ -75,37 +75,128 @@ const SEED_DATA = {
     ]
 };
 
-// Local storage logic
-function loadState() {
+// Database API + local storage fallback
+const API_BASE = "/api";
+let dbOnline = false;
+let saveTimeout = null;
+
+function normalizeStateShape(nextState) {
+    if (!nextState.categories || nextState.categories.length === 0) {
+        nextState.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
+    }
+    if (!nextState.users || nextState.users.length === 0) {
+        nextState.users = [
+            { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
+            { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
+            { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
+        ];
+    }
+    return nextState;
+}
+
+function loadStateFromLocalStorage() {
     const raw = localStorage.getItem("laela_erp_state");
     if (raw) {
         try {
-            state = JSON.parse(raw);
-            if (!state.categories || state.categories.length === 0) {
-                state.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
-                saveState();
-            }
-            if (!state.users || state.users.length === 0) {
-                state.users = [
-                    { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
-                    { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
-                    { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
-                ];
-                saveState();
-            }
+            state = normalizeStateShape(JSON.parse(raw));
+            return;
         } catch (e) {
             console.error("Failed to parse local storage state, loading seed data.", e);
-            state = { ...SEED_DATA };
-            saveState();
         }
-    } else {
-        state = { ...SEED_DATA };
-        saveState();
+    }
+    state = { ...SEED_DATA };
+}
+
+async function loadState() {
+    const localRaw = localStorage.getItem("laela_erp_state");
+    let localState = null;
+    if (localRaw) {
+        try {
+            localState = normalizeStateShape(JSON.parse(localRaw));
+        } catch (e) {
+            console.warn("Could not parse existing local storage state.", e);
+        }
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/state`);
+        if (response.ok) {
+            const apiState = normalizeStateShape(await response.json());
+            dbOnline = true;
+
+            const shouldMigrateLocalData = localState
+                && !sessionStorage.getItem("laela_erp_db_migrated")
+                && (localState.products.length > 0 || localState.sales.length > 0);
+
+            if (shouldMigrateLocalData) {
+                state = localState;
+                await persistStateImmediate();
+                sessionStorage.setItem("laela_erp_db_migrated", "true");
+            } else {
+                state = apiState;
+            }
+
+            saveStateToLocalStorage();
+            updateDatabaseStatus();
+            return;
+        }
+    } catch (e) {
+        console.warn("Database API unavailable, using local storage.", e);
+    }
+
+    dbOnline = false;
+    loadStateFromLocalStorage();
+    updateDatabaseStatus();
+}
+
+function saveStateToLocalStorage() {
+    localStorage.setItem("laela_erp_state", JSON.stringify(state));
+}
+
+async function persistStateImmediate() {
+    saveStateToLocalStorage();
+
+    if (!dbOnline) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/state`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(state)
+        });
+        if (!response.ok) {
+            throw new Error(`Save failed with status ${response.status}`);
+        }
+        return true;
+    } catch (e) {
+        console.error("Failed to save to database, data kept in local storage.", e);
+        dbOnline = false;
+        return false;
     }
 }
 
+async function persistState() {
+    await persistStateImmediate();
+}
+
 function saveState() {
-    localStorage.setItem("laela_erp_state", JSON.stringify(state));
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        persistState();
+    }, 250);
+}
+
+function updateDatabaseStatus() {
+    const statusEl = document.getElementById("db-connection-status");
+    if (!statusEl) return;
+
+    if (dbOnline) {
+        statusEl.innerHTML = '<span class="badge badge-success"><i class="fa-solid fa-database"></i> Connected to SQLite database</span>';
+    } else {
+        statusEl.innerHTML = '<span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> Offline mode (browser storage only)</span>';
+    }
 }
 
 // Router & Switching Tabs
@@ -1758,12 +1849,28 @@ function deleteCategory(catName) {
     }
 }
 
-function resetERPDatabase() {
-    if (confirm("WARNING: Are you sure you want to reset the entire database? This will permanently delete all stock inventory, transactions, expenses, and categories. This action cannot be undone.")) {
-        localStorage.removeItem("laela_erp_state");
-        alert("Database wiped. The page will now reload to initialize the system.");
-        window.location.reload();
+async function resetERPDatabase() {
+    if (!confirm("WARNING: Are you sure you want to reset the entire database? This will permanently delete all stock inventory, transactions, expenses, and categories. This action cannot be undone.")) {
+        return;
     }
+
+    try {
+        const response = await fetch(`${API_BASE}/reset`, { method: "POST" });
+        if (response.ok) {
+            state = normalizeStateShape(await response.json());
+            saveStateToLocalStorage();
+            dbOnline = true;
+            alert("Database reset to defaults. The page will now reload.");
+            window.location.reload();
+            return;
+        }
+    } catch (e) {
+        console.warn("Database reset API unavailable, clearing local storage only.", e);
+    }
+
+    localStorage.removeItem("laela_erp_state");
+    alert("Database wiped. The page will now reload to initialize the system.");
+    window.location.reload();
 }
 
 // ==========================================
@@ -2037,7 +2144,7 @@ function deleteUser(id) {
 // ==========================================
 // APPLICATION LAUNCH AND INIT
 // ==========================================
-window.onload = function() {
+window.onload = async function() {
     // Write current date
     const today = new Date();
     document.getElementById("current-date").innerText = today.toLocaleDateString('en-IN', {
@@ -2047,8 +2154,8 @@ window.onload = function() {
         day: 'numeric'
     });
 
-    // Load Local Storage
-    loadState();
+    // Load from SQLite API (falls back to local storage)
+    await loadState();
 
     // Check Login Session
     checkLoginState();

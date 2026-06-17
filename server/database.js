@@ -1,0 +1,270 @@
+import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { SEED_DATA } from "./seed-data.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const dataDir = path.join(__dirname, "..", "data");
+const dbPath = path.join(dataDir, "laela_erp.db");
+
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const db = new Database(dbPath);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+function initSchema() {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS products (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sku TEXT NOT NULL UNIQUE,
+            category TEXT NOT NULL,
+            size TEXT NOT NULL,
+            cost_price REAL NOT NULL,
+            selling_price REAL NOT NULL,
+            stock INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS categories (
+            name TEXT PRIMARY KEY
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL,
+            status TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS expenses (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            amount REAL NOT NULL,
+            category TEXT NOT NULL,
+            notes TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS purchases (
+            id TEXT PRIMARY KEY,
+            date_time TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            product_name TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            size TEXT NOT NULL,
+            qty INTEGER NOT NULL,
+            cost_price REAL NOT NULL,
+            supplier TEXT NOT NULL,
+            total_outlay REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sales (
+            id TEXT PRIMARY KEY,
+            invoice_number TEXT NOT NULL,
+            date_time TEXT NOT NULL,
+            customer_name TEXT NOT NULL,
+            subtotal REAL NOT NULL,
+            discount_type TEXT NOT NULL,
+            discount_val REAL NOT NULL,
+            discount_deducted REAL NOT NULL,
+            tax REAL NOT NULL,
+            grand_total REAL NOT NULL,
+            cogs REAL NOT NULL,
+            profit REAL NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS sale_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            size TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            cost_price REAL NOT NULL,
+            selling_price REAL NOT NULL,
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        );
+    `);
+}
+
+function isEmpty() {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM products").get();
+    return row.count === 0;
+}
+
+function saveState(state) {
+    const write = db.transaction((nextState) => {
+        db.prepare("DELETE FROM sale_items").run();
+        db.prepare("DELETE FROM sales").run();
+        db.prepare("DELETE FROM purchases").run();
+        db.prepare("DELETE FROM expenses").run();
+        db.prepare("DELETE FROM products").run();
+        db.prepare("DELETE FROM categories").run();
+        db.prepare("DELETE FROM users").run();
+
+        const insertProduct = db.prepare(`
+            INSERT INTO products (id, name, sku, category, size, cost_price, selling_price, stock)
+            VALUES (@id, @name, @sku, @category, @size, @costPrice, @sellingPrice, @stock)
+        `);
+        for (const product of nextState.products || []) {
+            insertProduct.run(product);
+        }
+
+        const insertCategory = db.prepare("INSERT INTO categories (name) VALUES (?)");
+        for (const category of nextState.categories || []) {
+            insertCategory.run(category);
+        }
+
+        const insertUser = db.prepare(`
+            INSERT INTO users (id, name, username, password, role, status)
+            VALUES (@id, @name, @username, @password, @role, @status)
+        `);
+        for (const user of nextState.users || []) {
+            insertUser.run(user);
+        }
+
+        const insertExpense = db.prepare(`
+            INSERT INTO expenses (id, date, amount, category, notes)
+            VALUES (@id, @date, @amount, @category, @notes)
+        `);
+        for (const expense of nextState.expenses || []) {
+            insertExpense.run(expense);
+        }
+
+        const insertPurchase = db.prepare(`
+            INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, supplier, total_outlay)
+            VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @supplier, @totalOutlay)
+        `);
+        for (const purchase of nextState.purchases || []) {
+            insertPurchase.run(purchase);
+        }
+
+        const insertSale = db.prepare(`
+            INSERT INTO sales (id, invoice_number, date_time, customer_name, subtotal, discount_type, discount_val, discount_deducted, tax, grand_total, cogs, profit)
+            VALUES (@id, @invoiceNumber, @dateTime, @customerName, @subtotal, @discountType, @discountVal, @discountDeducted, @tax, @grandTotal, @cogs, @profit)
+        `);
+        const insertSaleItem = db.prepare(`
+            INSERT INTO sale_items (sale_id, product_id, name, sku, size, quantity, cost_price, selling_price)
+            VALUES (@saleId, @productId, @name, @sku, @size, @quantity, @costPrice, @sellingPrice)
+        `);
+        for (const sale of nextState.sales || []) {
+            insertSale.run(sale);
+            for (const item of sale.items || []) {
+                insertSaleItem.run({ saleId: sale.id, ...item });
+            }
+        }
+    });
+
+    write(state);
+}
+
+function loadState() {
+    const products = db.prepare(`
+        SELECT id, name, sku, category, size, cost_price AS costPrice, selling_price AS sellingPrice, stock
+        FROM products
+        ORDER BY name
+    `).all();
+
+    const categories = db.prepare("SELECT name FROM categories ORDER BY name").all().map((row) => row.name);
+
+    const users = db.prepare(`
+        SELECT id, name, username, password, role, status
+        FROM users
+        ORDER BY name
+    `).all();
+
+    const expenses = db.prepare(`
+        SELECT id, date, amount, category, notes
+        FROM expenses
+        ORDER BY date DESC
+    `).all();
+
+    const purchases = db.prepare(`
+        SELECT
+            id,
+            date_time AS dateTime,
+            product_id AS productId,
+            product_name AS productName,
+            sku,
+            size,
+            qty,
+            cost_price AS costPrice,
+            supplier,
+            total_outlay AS totalOutlay
+        FROM purchases
+        ORDER BY date_time DESC
+    `).all();
+
+    const salesRows = db.prepare(`
+        SELECT
+            id,
+            invoice_number AS invoiceNumber,
+            date_time AS dateTime,
+            customer_name AS customerName,
+            subtotal,
+            discount_type AS discountType,
+            discount_val AS discountVal,
+            discount_deducted AS discountDeducted,
+            tax,
+            grand_total AS grandTotal,
+            cogs,
+            profit
+        FROM sales
+        ORDER BY date_time DESC
+    `).all();
+
+    const saleItems = db.prepare(`
+        SELECT
+            sale_id AS saleId,
+            product_id AS productId,
+            name,
+            sku,
+            size,
+            quantity,
+            cost_price AS costPrice,
+            selling_price AS sellingPrice
+        FROM sale_items
+    `).all();
+
+    const itemsBySale = new Map();
+    for (const item of saleItems) {
+        const { saleId, ...rest } = item;
+        if (!itemsBySale.has(saleId)) {
+            itemsBySale.set(saleId, []);
+        }
+        itemsBySale.get(saleId).push(rest);
+    }
+
+    const sales = salesRows.map((sale) => ({
+        ...sale,
+        items: itemsBySale.get(sale.id) || []
+    }));
+
+    return {
+        products,
+        sales,
+        expenses,
+        purchases,
+        categories,
+        users
+    };
+}
+
+function resetDatabase() {
+    saveState(SEED_DATA);
+    return loadState();
+}
+
+initSchema();
+
+if (isEmpty()) {
+    saveState(SEED_DATA);
+}
+
+export { db, dbPath, loadState, saveState, resetDatabase };

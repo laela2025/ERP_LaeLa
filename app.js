@@ -2163,6 +2163,10 @@ window.onload = async function() {
     // Populate category dropdowns
     populateCategoryDropdowns();
 
-    // Start with Dashboard
-    switchTab("dashboard");
+    // Only navigate to a protected tab after login
+    const loggedIn = sessionStorage.getItem("laela_erp_logged_in") === "true";
+    if (loggedIn) {
+        // Start with Dashboard (role checks apply inside switchTab)
+        switchTab("dashboard");
+    }
 };

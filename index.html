@@ -659,6 +659,7 @@
                                         <thead>
                                             <tr>
                                                 <th>Date & Time</th>
+                                                <th>Bill #</th>
                                                 <th>SKU</th>
                                                 <th>Product Name</th>
                                                 <th>Size</th>
@@ -719,12 +720,12 @@
                             <span class="badge badge-secondary">Checking database...</span>
                         </p>
                         <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.6;">
-                            Store data is persisted in a local SQLite database when the API server is running. You can also download a complete backup of your stock inventory, sales transactions, purchase orders, expenses logs, and product categories as a JSON file, or restore a previous database backup.
+                            Store data is persisted in a local SQLite database when the API server is running. When connected, the backup download includes both a portable JSON export and a full SQLite database backup inside a ZIP archive. In offline mode, the backup is JSON-only (browser storage).
                         </p>
                         
                         <div style="display: flex; gap: 16px; margin-bottom: 32px;">
                             <button class="btn btn-primary" onclick="exportBackup()">
-                                <i class="fa-solid fa-download"></i> Download Local Backup
+                                <i class="fa-solid fa-download"></i> Download Backup (JSON + DB)
                             </button>
                             <button class="btn btn-secondary" onclick="triggerImport()">
                                 <i class="fa-solid fa-upload"></i> Restore from Backup File
@@ -874,6 +875,14 @@
                             <label for="inward-cost">Current Purchase Cost per Item (₹)</label>
                             <input type="number" step="0.01" class="form-control" id="inward-cost" min="0.01" required>
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="inward-date-time">Purchase Date & Time</label>
+                        <input type="datetime-local" class="form-control" id="inward-date-time" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="inward-bill-number">Bill / Invoice Number (Optional)</label>
+                        <input type="text" class="form-control" id="inward-bill-number" placeholder="e.g. INV-1029 / BILL-55">
                     </div>
                     <div class="form-group">
                         <label for="inward-supplier">Supplier / Reference details</label>

@@ -7,9 +7,13 @@ import { SEED_DATA } from "./seed-data.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "..", "data");
 const dbPath = path.join(dataDir, "laela_erp.db");
+const backupsDir = path.join(dataDir, "backups");
 
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+}
+if (!fs.existsSync(backupsDir)) {
+    fs.mkdirSync(backupsDir, { recursive: true });
 }
 
 const db = new Database(dbPath);
@@ -59,6 +63,7 @@ function initSchema() {
             size TEXT NOT NULL,
             qty INTEGER NOT NULL,
             cost_price REAL NOT NULL,
+            bill_number TEXT,
             supplier TEXT NOT NULL,
             total_outlay REAL NOT NULL
         );
@@ -91,6 +96,19 @@ function initSchema() {
             FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
         );
     `);
+}
+
+function ensureSchemaCompatibility() {
+    // Add purchases.bill_number for existing databases created before this field existed.
+    try {
+        const cols = db.prepare("PRAGMA table_info(purchases)").all().map((c) => c.name);
+        if (!cols.includes("bill_number")) {
+            db.exec("ALTER TABLE purchases ADD COLUMN bill_number TEXT");
+        }
+    } catch (e) {
+        // If anything goes wrong, we keep running; the app will still work without bill numbers persisted.
+        console.warn("Schema compatibility check failed:", e);
+    }
 }
 
 function isEmpty() {
@@ -138,8 +156,8 @@ function saveState(state) {
         }
 
         const insertPurchase = db.prepare(`
-            INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, supplier, total_outlay)
-            VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @supplier, @totalOutlay)
+            INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, bill_number, supplier, total_outlay)
+            VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @billNumber, @supplier, @totalOutlay)
         `);
         for (const purchase of nextState.purchases || []) {
             insertPurchase.run(purchase);
@@ -195,6 +213,7 @@ function loadState() {
             size,
             qty,
             cost_price AS costPrice,
+            bill_number AS billNumber,
             supplier,
             total_outlay AS totalOutlay
         FROM purchases
@@ -262,9 +281,20 @@ function resetDatabase() {
 }
 
 initSchema();
+ensureSchemaCompatibility();
 
 if (isEmpty()) {
     saveState(SEED_DATA);
 }
 
 export { db, dbPath, loadState, saveState, resetDatabase };
+
+export async function createDatabaseBackupFile(prefix = "laela_erp_backup") {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `${prefix}_${timestamp}.db`;
+    const backupPath = path.join(backupsDir, filename);
+
+    // better-sqlite3 provides a consistent online backup even in WAL mode.
+    await db.backup(backupPath);
+    return backupPath;
+}

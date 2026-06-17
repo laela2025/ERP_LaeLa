@@ -636,6 +636,13 @@ function openStockInwardModal() {
     });
 
     document.getElementById("stock-inward-form").reset();
+
+    // Default purchase date/time to "now" (local time) for inward stock log.
+    const dt = new Date();
+    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+    const nowLocal = dt.toISOString().slice(0, 16);
+    const inwardDtInput = document.getElementById("inward-date-time");
+    if (inwardDtInput) inwardDtInput.value = nowLocal;
     
     // Auto populate unit cost from first product
     const firstProd = state.products[0];
@@ -661,6 +668,19 @@ function saveStockInward(event) {
     const qty = parseInt(document.getElementById("inward-qty").value) || 0;
     const costPrice = parseFloat(document.getElementById("inward-cost").value) || 0;
     const supplier = document.getElementById("inward-supplier").value.trim() || "Supplier Wholesale Market";
+    const purchaseDateTimeRaw = (document.getElementById("inward-date-time")?.value || "").trim();
+    const billNumber = (document.getElementById("inward-bill-number")?.value || "").trim();
+
+    if (!purchaseDateTimeRaw) {
+        alert("Please select the purchase date & time.");
+        return;
+    }
+    const purchaseDate = new Date(purchaseDateTimeRaw);
+    if (Number.isNaN(purchaseDate.getTime())) {
+        alert("Invalid purchase date/time.");
+        return;
+    }
+    const purchaseDateTimeIso = purchaseDate.toISOString();
 
     const product = state.products.find(p => p.id === prodId);
     if (!product) return;
@@ -693,13 +713,14 @@ function saveStockInward(event) {
     // Log purchase/stock inward transaction
     state.purchases.push({
         id: "pur_" + Date.now(),
-        dateTime: new Date().toISOString(),
+        dateTime: purchaseDateTimeIso,
         productId: targetProdId,
         productName: targetProduct.name,
         sku: targetProduct.sku,
         size: targetProduct.size,
         qty: qty,
         costPrice: costPrice,
+        billNumber: billNumber,
         supplier: supplier,
         totalOutlay: qty * costPrice
     });
@@ -1492,6 +1513,7 @@ function renderReportPurchasesTable(filteredPurchases) {
         tbody.innerHTML += `
             <tr>
                 <td>${timeStr}</td>
+                <td>${p.billNumber ? `<code>${p.billNumber}</code>` : '—'}</td>
                 <td><code>${p.sku}</code></td>
                 <td><strong>${p.productName}</strong></td>
                 <td><span class="badge badge-info">${p.size}</span></td>
@@ -1645,10 +1667,11 @@ function exportCSVReport(type) {
             return pDate >= range.start && pDate <= range.end;
         });
 
-        csvContent += "Date,SKU,Product Name,Size,Quantity Added,Unit Cost Price,Total Expenditure,Supplier\n";
+        csvContent += "Date,Bill Number,SKU,Product Name,Size,Quantity Added,Unit Cost Price,Total Expenditure,Supplier\n";
         filteredPurchases.forEach(p => {
             const dateStr = new Date(p.dateTime).toLocaleDateString('en-IN');
-            csvContent += `${dateStr},${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${p.totalOutlay},"${p.supplier}"\n`;
+            const bill = (p.billNumber || "").replace(/"/g, '""');
+            csvContent += `${dateStr},"${bill}",${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${p.totalOutlay},"${p.supplier}"\n`;
         });
     } 
     else if (type === 'margins') {
@@ -1709,8 +1732,17 @@ function exportCSVReport(type) {
 // BACKUP / RESTORE UTILITIES
 // ==========================================
 function exportBackup() {
+    // If the API (SQLite) is online, download a full backup archive that includes:
+    // - JSON state (portable)
+    // - SQLite DB file (full database backup)
+    if (dbOnline) {
+        window.location.href = `${API_BASE}/backup/full`;
+        return;
+    }
+
+    // Offline fallback: JSON-only backup from browser storage.
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
-    const downloadAnchor = document.createElement('a');
+    const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `laela_erp_backup_${new Date().toISOString().substring(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);

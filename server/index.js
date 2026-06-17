@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
+import archiver from "archiver";
 import { fileURLToPath } from "url";
-import { dbPath, loadState, resetDatabase, saveState } from "./database.js";
+import { dbPath, loadState, resetDatabase, saveState, createDatabaseBackupFile } from "./database.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -46,6 +48,50 @@ app.post("/api/reset", (_req, res) => {
     } catch (error) {
         console.error("Failed to reset database:", error);
         res.status(500).json({ error: "Failed to reset database." });
+    }
+});
+
+app.get("/api/backup/full", async (_req, res) => {
+    let tempDbBackupPath = null;
+    try {
+        tempDbBackupPath = await createDatabaseBackupFile("laela_erp_db");
+
+        const dateTag = new Date().toISOString().substring(0, 10);
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename=\"laela_erp_full_backup_${dateTag}.zip\"`);
+
+        const archive = archiver("zip", { zlib: { level: 9 } });
+        archive.on("error", (err) => {
+            throw err;
+        });
+
+        archive.pipe(res);
+
+        // Include logical JSON backup (for portability)
+        const state = loadState();
+        archive.append(JSON.stringify(state, null, 2), { name: "laela_erp_state.json" });
+
+        // Include physical SQLite backup (for full DB restore/debug)
+        archive.file(tempDbBackupPath, { name: "laela_erp.db" });
+
+        await archive.finalize();
+
+        // Cleanup temp DB backup after response ends
+        res.on("close", () => {
+            if (tempDbBackupPath && fs.existsSync(tempDbBackupPath)) {
+                try { fs.unlinkSync(tempDbBackupPath); } catch { /* ignore */ }
+            }
+        });
+    } catch (error) {
+        console.error("Failed to create full backup:", error);
+        if (tempDbBackupPath && fs.existsSync(tempDbBackupPath)) {
+            try { fs.unlinkSync(tempDbBackupPath); } catch { /* ignore */ }
+        }
+        if (!res.headersSent) {
+            res.status(500).json({ error: "Failed to generate backup archive." });
+        } else {
+            res.end();
+        }
     }
 });
 

@@ -1,0 +1,6 @@
+# Version the main SQLite database in git (via Git LFS).
+data/laela_erp.db filter=lfs diff=lfs merge=ours -text
+
+# Runtime WAL/SHM files must never be committed.
+*.db-wal -text
+*.db-shm -text

@@ -87,11 +87,7 @@ function normalizeStateShape(nextState) {
         nextState.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
     }
     if (nextState.users == null) {
-        nextState.users = [
-            { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
-            { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
-            { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
-        ];
+        nextState.users = [];
     }
     return nextState;
 }
@@ -132,7 +128,8 @@ async function loadState() {
 
             if (shouldMigrateLocalData) {
                 state = localState;
-                await persistStateImmediate();
+                state.users = apiState.users;
+                await persistStateImmediate(false);
                 sessionStorage.setItem("laela_erp_db_migrated", "true");
             } else {
                 state = apiState;
@@ -155,7 +152,7 @@ function saveStateToLocalStorage() {
     localStorage.setItem("laela_erp_state", JSON.stringify(state));
 }
 
-async function persistStateImmediate() {
+async function persistStateImmediate(updateUsers = false) {
     saveStateToLocalStorage();
 
     if (!dbOnline) {
@@ -163,10 +160,23 @@ async function persistStateImmediate() {
     }
 
     try {
+        const payload = {
+            products: state.products,
+            sales: state.sales,
+            expenses: state.expenses,
+            purchases: state.purchases,
+            categories: state.categories
+        };
+        const headers = { "Content-Type": "application/json" };
+        if (updateUsers) {
+            payload.users = state.users;
+            headers["X-Update-Users"] = "true";
+        }
+
         const response = await fetch(`${API_BASE}/state`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(state)
+            headers,
+            body: JSON.stringify(payload)
         });
         if (!response.ok) {
             throw new Error(`Save failed with status ${response.status}`);
@@ -179,14 +189,14 @@ async function persistStateImmediate() {
     }
 }
 
-async function persistState() {
-    await persistStateImmediate();
+async function persistState(updateUsers = false) {
+    await persistStateImmediate(updateUsers);
 }
 
-function saveState() {
+function saveState(updateUsers = false) {
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
-        persistState();
+        persistState(updateUsers);
     }, 250);
 }
 
@@ -2173,7 +2183,7 @@ function saveUser(event) {
         }
     }
 
-    saveState();
+    saveState(true);
     closeUserModal();
     renderUsersTable();
 }
@@ -2192,7 +2202,7 @@ function deleteUser(id) {
 
     if (confirm(`Are you sure you want to delete user "${user.name}" (${user.username})?`)) {
         state.users = state.users.filter(u => u.id !== id);
-        saveState();
+        saveState(true);
         renderUsersTable();
     }
 }

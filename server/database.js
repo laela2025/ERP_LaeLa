@@ -153,7 +153,7 @@ function needsSeedData() {
     );
 }
 
-function saveState(state) {
+function saveState(state, { updateUsers = true } = {}) {
     runInTransaction(() => {
         db.prepare("DELETE FROM sale_items").run();
         db.prepare("DELETE FROM sales").run();
@@ -161,7 +161,9 @@ function saveState(state) {
         db.prepare("DELETE FROM expenses").run();
         db.prepare("DELETE FROM products").run();
         db.prepare("DELETE FROM categories").run();
-        db.prepare("DELETE FROM users").run();
+        if (updateUsers) {
+            db.prepare("DELETE FROM users").run();
+        }
 
         const insertProduct = db.prepare(`
             INSERT INTO products (id, name, sku, category, size, cost_price, selling_price, stock)
@@ -180,8 +182,10 @@ function saveState(state) {
             INSERT INTO users (id, name, username, password, role, status)
             VALUES (@id, @name, @username, @password, @role, @status)
         `);
-        for (const user of state.users || []) {
-            insertUser.run(user);
+        if (updateUsers) {
+            for (const user of state.users || []) {
+                insertUser.run(user);
+            }
         }
 
         const insertExpense = db.prepare(`

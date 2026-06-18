@@ -28,11 +28,11 @@ app.get("/api/state", (_req, res) => {
 
 app.put("/api/state", (req, res) => {
     const nextState = req.body;
+    const updateUsers = req.get("X-Update-Users") === "true";
     if (
         !nextState
         || !Array.isArray(nextState.products)
         || !Array.isArray(nextState.sales)
-        || !Array.isArray(nextState.users)
         || !Array.isArray(nextState.categories)
         || !Array.isArray(nextState.expenses)
         || !Array.isArray(nextState.purchases)
@@ -41,7 +41,14 @@ app.put("/api/state", (req, res) => {
     }
 
     try {
-        saveState(nextState);
+        const currentState = loadState();
+        if (!updateUsers) {
+            nextState.users = currentState.users;
+        } else if (!Array.isArray(nextState.users)) {
+            return res.status(400).json({ error: "Invalid users payload." });
+        }
+
+        saveState(nextState, { updateUsers });
         res.json({ ok: true });
     } catch (error) {
         console.error("Failed to save state:", error);

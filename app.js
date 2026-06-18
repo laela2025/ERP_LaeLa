@@ -81,10 +81,12 @@ let dbOnline = false;
 let saveTimeout = null;
 
 function normalizeStateShape(nextState) {
-    if (!nextState.categories || nextState.categories.length === 0) {
+    // Only backfill when the field is missing (older saved states),
+    // not when the array is intentionally empty.
+    if (nextState.categories == null) {
         nextState.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
     }
-    if (!nextState.users || nextState.users.length === 0) {
+    if (nextState.users == null) {
         nextState.users = [
             { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
             { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
@@ -1731,17 +1733,29 @@ function exportCSVReport(type) {
 // ==========================================
 // BACKUP / RESTORE UTILITIES
 // ==========================================
+function exportStateForBackup(sourceState) {
+    const { users, ...businessData } = sourceState;
+    return businessData;
+}
+
+function restoreStateFromBackup(parsed, currentUsers) {
+    return normalizeStateShape({
+        ...parsed,
+        users: currentUsers
+    });
+}
+
 function exportBackup() {
     // If the API (SQLite) is online, download a full backup archive that includes:
-    // - JSON state (portable)
-    // - SQLite DB file (full database backup)
+    // - JSON state (business data only; users/roles are not included)
+    // - SQLite DB file (full database snapshot)
     if (dbOnline) {
         window.location.href = `${API_BASE}/backup/full`;
         return;
     }
 
-    // Offline fallback: JSON-only backup from browser storage.
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+    // Offline fallback: JSON-only backup from browser storage (no users).
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportStateForBackup(state)));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `laela_erp_backup_${new Date().toISOString().substring(0, 10)}.json`);
@@ -1763,10 +1777,11 @@ function importBackup(event) {
     reader.onload = function() {
         try {
             const parsed = JSON.parse(reader.result);
-            if (parsed.products && parsed.sales && parsed.expenses && parsed.purchases) {
-                state = parsed;
+            if (parsed.products != null && parsed.sales != null && parsed.expenses != null && parsed.purchases != null) {
+                const currentUsers = state.users;
+                state = restoreStateFromBackup(parsed, currentUsers);
                 saveState();
-                alert("ERP Database successfully restored from backup!");
+                alert("Business data restored from backup. User accounts and roles were kept unchanged.");
                 switchTab(activeTab); // reload active tab
             } else {
                 alert("Invalid backup file structure. Ensure it is a valid LaeLa ERP file.");
@@ -1882,7 +1897,7 @@ function deleteCategory(catName) {
 }
 
 async function resetERPDatabase() {
-    if (!confirm("WARNING: Are you sure you want to reset the entire database? This will permanently delete all stock inventory, transactions, expenses, and categories. This action cannot be undone.")) {
+    if (!confirm("WARNING: Reset all business data? This will permanently delete all products, categories, stock, sales, purchases, and expenses. User accounts and roles will be kept.")) {
         return;
     }
 
@@ -1892,7 +1907,7 @@ async function resetERPDatabase() {
             state = normalizeStateShape(await response.json());
             saveStateToLocalStorage();
             dbOnline = true;
-            alert("Database reset to defaults. The page will now reload.");
+            alert("Business data cleared. User accounts and roles were kept. The page will now reload.");
             window.location.reload();
             return;
         }
@@ -1900,8 +1915,17 @@ async function resetERPDatabase() {
         console.warn("Database reset API unavailable, clearing local storage only.", e);
     }
 
-    localStorage.removeItem("laela_erp_state");
-    alert("Database wiped. The page will now reload to initialize the system.");
+    const currentUsers = state.users;
+    state = {
+        products: [],
+        sales: [],
+        expenses: [],
+        purchases: [],
+        categories: [],
+        users: currentUsers
+    };
+    saveStateToLocalStorage();
+    alert("Business data cleared. User accounts and roles were kept. The page will now reload.");
     window.location.reload();
 }
 

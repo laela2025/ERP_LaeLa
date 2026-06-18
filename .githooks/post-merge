@@ -1,0 +1,24 @@
+#!/bin/sh
+# Safety net: if the database was protected (skip-worktree) but got updated anyway,
+# restore it from the newest backup in data/backups/.
+
+DB="data/laela_erp.db"
+BACKUPS="data/backups"
+
+if [ ! -f "$DB" ]; then
+  exit 0
+fi
+
+# skip-worktree bit set? (leading S in ls-files -v)
+if git ls-files -v -- "$DB" 2>/dev/null | grep -q '^S'; then
+  # If git still changed the file, warn the operator.
+  if git diff --name-only HEAD@{1} HEAD -- "$DB" 2>/dev/null | grep -q .; then
+    echo ""
+    echo "WARNING: $DB was updated during merge despite skip-worktree."
+    echo "         Run: git checkout HEAD@{1} -- $DB"
+    echo "         Or restore from data/backups/"
+    echo ""
+  fi
+fi
+
+exit 0

@@ -9,11 +9,20 @@
     "server": "node server/index.js",
     "build": "vite build",
     "start": "node server/index.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup:git-db": "powershell -ExecutionPolicy Bypass -File scripts/setup-git-db.ps1",
+    "db:init": "node server/init-db.js",
+    "db:use-in-git": "powershell -ExecutionPolicy Bypass -File scripts/use-repo-db.ps1",
+    "db:protect": "powershell -ExecutionPolicy Bypass -File scripts/db-protect.ps1",
+    "db:sync": "powershell -ExecutionPolicy Bypass -File scripts/db-sync.ps1",
+    "db:status": "powershell -ExecutionPolicy Bypass -File scripts/db-status.ps1",
+    "hooks:install": "powershell -ExecutionPolicy Bypass -File scripts/install-hooks.ps1"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   },
   "dependencies": {
     "archiver": "^7.0.1",
-    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   },

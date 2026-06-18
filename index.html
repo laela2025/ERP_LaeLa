@@ -720,7 +720,7 @@
                             <span class="badge badge-secondary">Checking database...</span>
                         </p>
                         <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.6;">
-                            Store data is persisted in a local SQLite database when the API server is running. When connected, the backup download includes both a portable JSON export and a full SQLite database backup inside a ZIP archive. In offline mode, the backup is JSON-only (browser storage).
+                            Store data is persisted in a local SQLite database when the API server is running. Backup downloads include business data (products, sales, stock, etc.). User accounts and roles are never included in backups and are always kept on this machine.
                         </p>
                         
                         <div style="display: flex; gap: 16px; margin-bottom: 32px;">
@@ -737,7 +737,7 @@
                         
                         <h4 style="margin-bottom: 12px; font-size: 1rem; color: var(--danger);">Danger Zone</h4>
                         <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.85rem;">
-                            Resetting the database will delete all local products, categories, transactions, and expenses. Ensure you have exported a backup copy before proceeding.
+                            Reset will delete all products, categories, stock, sales, purchases, and expenses. User accounts and roles will not be deleted.
                         </p>
                         <button class="btn btn-danger" onclick="resetERPDatabase()">
                             <i class="fa-solid fa-trash-arrow-up"></i> Reset All Data

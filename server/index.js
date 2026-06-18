@@ -28,7 +28,15 @@ app.get("/api/state", (_req, res) => {
 
 app.put("/api/state", (req, res) => {
     const nextState = req.body;
-    if (!nextState || !Array.isArray(nextState.products) || !Array.isArray(nextState.sales)) {
+    if (
+        !nextState
+        || !Array.isArray(nextState.products)
+        || !Array.isArray(nextState.sales)
+        || !Array.isArray(nextState.users)
+        || !Array.isArray(nextState.categories)
+        || !Array.isArray(nextState.expenses)
+        || !Array.isArray(nextState.purchases)
+    ) {
         return res.status(400).json({ error: "Invalid ERP state payload." });
     }
 
@@ -67,9 +75,10 @@ app.get("/api/backup/full", async (_req, res) => {
 
         archive.pipe(res);
 
-        // Include logical JSON backup (for portability)
+        // JSON backup: business data only (users/roles stay on this machine).
         const state = loadState();
-        archive.append(JSON.stringify(state, null, 2), { name: "laela_erp_state.json" });
+        const { users, ...businessData } = state;
+        archive.append(JSON.stringify(businessData, null, 2), { name: "laela_erp_state.json" });
 
         // Include physical SQLite backup (for full DB restore/debug)
         archive.file(tempDbBackupPath, { name: "laela_erp.db" });

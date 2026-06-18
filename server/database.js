@@ -1,12 +1,19 @@
-import Database from "better-sqlite3";
+import { DatabaseSync, backup } from "node:sqlite";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { SEED_DATA } from "./seed-data.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, "..", "data");
-const dbPath = path.join(dataDir, "laela_erp.db");
+// Database location:
+// - Default: ./data/laela_erp.db (can be versioned in git via Git LFS)
+// - Override: set LAELA_ERP_DB_PATH to an absolute path outside the repo
+//
+// Live data safety: run `npm run db:protect` so git pull/push of code never
+// overwrites or commits your real ERP data. See README.md.
+const envDbPath = process.env.LAELA_ERP_DB_PATH && process.env.LAELA_ERP_DB_PATH.trim();
+const dataDir = envDbPath ? path.dirname(envDbPath) : path.join(__dirname, "..", "data");
+const dbPath = envDbPath || path.join(dataDir, "laela_erp.db");
 const backupsDir = path.join(dataDir, "backups");
 
 if (!fs.existsSync(dataDir)) {
@@ -16,9 +23,20 @@ if (!fs.existsSync(backupsDir)) {
     fs.mkdirSync(backupsDir, { recursive: true });
 }
 
-const db = new Database(dbPath);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+const db = new DatabaseSync(dbPath);
+db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA foreign_keys = ON");
+
+function runInTransaction(fn) {
+    db.exec("BEGIN");
+    try {
+        fn();
+        db.exec("COMMIT");
+    } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+    }
+}
 
 function initSchema() {
     db.exec(`
@@ -111,13 +129,32 @@ function ensureSchemaCompatibility() {
     }
 }
 
-function isEmpty() {
-    const row = db.prepare("SELECT COUNT(*) AS count FROM products").get();
-    return row.count === 0;
+function needsSeedData() {
+    const counts = db.prepare(`
+        SELECT
+            (SELECT COUNT(*) FROM products)  AS productsCount,
+            (SELECT COUNT(*) FROM categories) AS categoriesCount,
+            (SELECT COUNT(*) FROM users)     AS usersCount,
+            (SELECT COUNT(*) FROM expenses)  AS expensesCount,
+            (SELECT COUNT(*) FROM purchases) AS purchasesCount,
+            (SELECT COUNT(*) FROM sales)     AS salesCount,
+            (SELECT COUNT(*) FROM sale_items) AS saleItemsCount
+    `).get();
+
+    // Only seed when the database is truly new/empty.
+    return (
+        counts.productsCount === 0
+        && counts.categoriesCount === 0
+        && counts.usersCount === 0
+        && counts.expensesCount === 0
+        && counts.purchasesCount === 0
+        && counts.salesCount === 0
+        && counts.saleItemsCount === 0
+    );
 }
 
 function saveState(state) {
-    const write = db.transaction((nextState) => {
+    runInTransaction(() => {
         db.prepare("DELETE FROM sale_items").run();
         db.prepare("DELETE FROM sales").run();
         db.prepare("DELETE FROM purchases").run();
@@ -130,12 +167,12 @@ function saveState(state) {
             INSERT INTO products (id, name, sku, category, size, cost_price, selling_price, stock)
             VALUES (@id, @name, @sku, @category, @size, @costPrice, @sellingPrice, @stock)
         `);
-        for (const product of nextState.products || []) {
+        for (const product of state.products || []) {
             insertProduct.run(product);
         }
 
         const insertCategory = db.prepare("INSERT INTO categories (name) VALUES (?)");
-        for (const category of nextState.categories || []) {
+        for (const category of state.categories || []) {
             insertCategory.run(category);
         }
 
@@ -143,7 +180,7 @@ function saveState(state) {
             INSERT INTO users (id, name, username, password, role, status)
             VALUES (@id, @name, @username, @password, @role, @status)
         `);
-        for (const user of nextState.users || []) {
+        for (const user of state.users || []) {
             insertUser.run(user);
         }
 
@@ -151,7 +188,7 @@ function saveState(state) {
             INSERT INTO expenses (id, date, amount, category, notes)
             VALUES (@id, @date, @amount, @category, @notes)
         `);
-        for (const expense of nextState.expenses || []) {
+        for (const expense of state.expenses || []) {
             insertExpense.run(expense);
         }
 
@@ -159,7 +196,7 @@ function saveState(state) {
             INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, bill_number, supplier, total_outlay)
             VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @billNumber, @supplier, @totalOutlay)
         `);
-        for (const purchase of nextState.purchases || []) {
+        for (const purchase of state.purchases || []) {
             insertPurchase.run(purchase);
         }
 
@@ -171,15 +208,14 @@ function saveState(state) {
             INSERT INTO sale_items (sale_id, product_id, name, sku, size, quantity, cost_price, selling_price)
             VALUES (@saleId, @productId, @name, @sku, @size, @quantity, @costPrice, @sellingPrice)
         `);
-        for (const sale of nextState.sales || []) {
-            insertSale.run(sale);
-            for (const item of sale.items || []) {
+        for (const sale of state.sales || []) {
+            const { items, ...saleRow } = sale;
+            insertSale.run(saleRow);
+            for (const item of items || []) {
                 insertSaleItem.run({ saleId: sale.id, ...item });
             }
         }
     });
-
-    write(state);
 }
 
 function loadState() {
@@ -276,14 +312,27 @@ function loadState() {
 }
 
 function resetDatabase() {
-    saveState(SEED_DATA);
+    const users = db.prepare(`
+        SELECT id, name, username, password, role, status
+        FROM users
+        ORDER BY name
+    `).all();
+
+    saveState({
+        products: [],
+        sales: [],
+        expenses: [],
+        purchases: [],
+        categories: [],
+        users
+    });
     return loadState();
 }
 
 initSchema();
 ensureSchemaCompatibility();
 
-if (isEmpty()) {
+if (needsSeedData()) {
     saveState(SEED_DATA);
 }
 
@@ -294,7 +343,7 @@ export async function createDatabaseBackupFile(prefix = "laela_erp_backup") {
     const filename = `${prefix}_${timestamp}.db`;
     const backupPath = path.join(backupsDir, filename);
 
-    // better-sqlite3 provides a consistent online backup even in WAL mode.
-    await db.backup(backupPath);
+    // Online backup via Node's built-in sqlite module (works in WAL mode).
+    await backup(db, backupPath);
     return backupPath;
 }

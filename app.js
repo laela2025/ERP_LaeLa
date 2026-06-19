@@ -85,7 +85,7 @@ const API_BASE = (() => {
         return meta.content.trim().replace(/\/$/, "");
     }
     if (window.location.hostname === "erp.laela.online") {
-        return "https://api.laela.online/api";
+        return "https://api.laela.online:27015/api";
     }
     return "/api";
 })();

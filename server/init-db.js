@@ -1,4 +1,5 @@
-import { db, dbPath } from "./database.js";
+import { initDatabase, closeDatabase, dbPath, dbEngine } from "./database.js";
 
-db.close();
-console.log(`Database ready: ${dbPath}`);
+await initDatabase();
+await closeDatabase();
+console.log(`Database ready (${dbEngine}): ${dbPath}`);

@@ -1,32 +1,61 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
 import archiver from "archiver";
 import { fileURLToPath } from "url";
-import { dbPath, loadState, resetDatabase, saveState, createDatabaseBackupFile } from "./database.js";
+import {
+    initDatabase,
+    dbPath,
+    dbEngine,
+    loadState,
+    resetDatabase,
+    saveState,
+    createDatabaseBackupFile
+} from "./database.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || "0.0.0.0";
 
-app.use(cors());
+const defaultOrigins = [
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "https://erp.laela.online",
+    "https://laela2025.github.io"
+];
+const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins.join(","))
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, false);
+        }
+    }
+}));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, database: dbPath });
+    res.json({ ok: true, engine: dbEngine, database: dbPath });
 });
 
-app.get("/api/state", (_req, res) => {
+app.get("/api/state", async (_req, res) => {
     try {
-        res.json(loadState());
+        res.json(await loadState());
     } catch (error) {
         console.error("Failed to load state:", error);
         res.status(500).json({ error: "Failed to load database state." });
     }
 });
 
-app.put("/api/state", (req, res) => {
+app.put("/api/state", async (req, res) => {
     const nextState = req.body;
     const updateUsers = req.get("X-Update-Users") === "true";
     if (
@@ -41,14 +70,14 @@ app.put("/api/state", (req, res) => {
     }
 
     try {
-        const currentState = loadState();
+        const currentState = await loadState();
         if (!updateUsers) {
             nextState.users = currentState.users;
         } else if (!Array.isArray(nextState.users)) {
             return res.status(400).json({ error: "Invalid users payload." });
         }
 
-        saveState(nextState, { updateUsers });
+        await saveState(nextState, { updateUsers });
         res.json({ ok: true });
     } catch (error) {
         console.error("Failed to save state:", error);
@@ -56,9 +85,9 @@ app.put("/api/state", (req, res) => {
     }
 });
 
-app.post("/api/reset", (_req, res) => {
+app.post("/api/reset", async (_req, res) => {
     try {
-        const state = resetDatabase();
+        const state = await resetDatabase();
         res.json(state);
     } catch (error) {
         console.error("Failed to reset database:", error);
@@ -82,17 +111,18 @@ app.get("/api/backup/full", async (_req, res) => {
 
         archive.pipe(res);
 
-        // JSON backup: business data only (users/roles stay on this machine).
-        const state = loadState();
+        const state = await loadState();
         const { users, ...businessData } = state;
         archive.append(JSON.stringify(businessData, null, 2), { name: "laela_erp_state.json" });
 
-        // Include physical SQLite backup (for full DB restore/debug)
-        archive.file(tempDbBackupPath, { name: "laela_erp.db" });
+        if (dbEngine === "sqlite") {
+            archive.file(tempDbBackupPath, { name: "laela_erp.db" });
+        } else {
+            archive.file(tempDbBackupPath, { name: "laela_erp_postgres.json" });
+        }
 
         await archive.finalize();
 
-        // Cleanup temp DB backup after response ends
         res.on("close", () => {
             if (tempDbBackupPath && fs.existsSync(tempDbBackupPath)) {
                 try { fs.unlinkSync(tempDbBackupPath); } catch { /* ignore */ }
@@ -111,20 +141,44 @@ app.get("/api/backup/full", async (_req, res) => {
     }
 });
 
-const distPath = path.join(__dirname, "..", "dist");
-app.use(express.static(distPath));
-app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api")) {
-        return next();
-    }
-    res.sendFile(path.join(distPath, "index.html"), (error) => {
-        if (error) {
-            next();
-        }
-    });
-});
+const API_ONLY = process.env.LAELA_API_ONLY === "true" || process.env.LAELA_API_ONLY === "1";
 
-app.listen(PORT, () => {
-    console.log(`LaeLa ERP API running at http://localhost:${PORT}`);
-    console.log(`SQLite database: ${dbPath}`);
+if (!API_ONLY) {
+    const projectRoot = path.join(__dirname, "..");
+    const distPath = path.join(projectRoot, "dist");
+    const staticRoot = fs.existsSync(path.join(distPath, "index.html")) ? distPath : projectRoot;
+
+    app.use(express.static(staticRoot, { index: "index.html" }));
+    app.get("*", (req, res, next) => {
+        if (req.path.startsWith("/api")) {
+            return next();
+        }
+        res.sendFile(path.join(staticRoot, "index.html"), (error) => {
+            if (error) {
+                next(error);
+            }
+        });
+    });
+} else {
+    app.get("/", (_req, res) => {
+        res.json({
+            service: "LaeLa ERP API",
+            frontend: "https://erp.laela.online",
+            health: "/api/health"
+        });
+    });
+}
+
+await initDatabase();
+
+app.listen(PORT, HOST, () => {
+    if (API_ONLY) {
+        console.log(`LaeLa ERP API-only mode (no frontend on this server)`);
+        console.log(`Frontend: https://erp.laela.online (GitHub Pages)`);
+    } else {
+        console.log(`LaeLa ERP running at http://localhost:${PORT}`);
+    }
+    console.log(`API: http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}/api`);
+    console.log(`Database engine: ${dbEngine}`);
+    console.log(`Database: ${dbPath}`);
 });

@@ -75,10 +75,23 @@ const SEED_DATA = {
     ]
 };
 
-// Database API + local storage fallback
-const API_BASE = "/api";
+// Browsers cannot connect to PostgreSQL — only to the Node API (see api-config.js).
+const API_BASE = (() => {
+    if (typeof window.LAELA_API_BASE === "string" && window.LAELA_API_BASE.trim()) {
+        return window.LAELA_API_BASE.trim().replace(/\/$/, "");
+    }
+    const meta = document.querySelector('meta[name="laela-api-base"]');
+    if (meta && meta.content && meta.content.trim()) {
+        return meta.content.trim().replace(/\/$/, "");
+    }
+    if (window.location.hostname === "erp.laela.online") {
+        return "https://api.laela.online/api";
+    }
+    return "/api";
+})();
 let dbOnline = false;
 let saveTimeout = null;
+let reconnectTimer = null;
 
 function normalizeStateShape(nextState) {
     // Only backfill when the field is missing (older saved states),
@@ -104,6 +117,7 @@ function loadStateFromLocalStorage() {
     }
     state = { ...SEED_DATA };
 }
+
 
 async function loadState() {
     const localRaw = localStorage.getItem("laela_erp_state");
@@ -148,14 +162,35 @@ async function loadState() {
     updateDatabaseStatus();
 }
 
+function scheduleDatabaseReconnect() {
+    if (reconnectTimer) {
+        return;
+    }
+    reconnectTimer = setInterval(async () => {
+        if (dbOnline) {
+            return;
+        }
+        try {
+            const response = await fetch(`${API_BASE}/state`);
+            if (response.ok) {
+                clearInterval(reconnectTimer);
+                reconnectTimer = null;
+                await loadState();
+                switchTab(activeTab);
+            }
+        } catch {
+            // keep trying
+        }
+    }, 5000);
+}
+
 function saveStateToLocalStorage() {
     localStorage.setItem("laela_erp_state", JSON.stringify(state));
 }
 
 async function persistStateImmediate(updateUsers = false) {
-    saveStateToLocalStorage();
-
     if (!dbOnline) {
+        updateDatabaseStatus();
         return false;
     }
 
@@ -181,10 +216,13 @@ async function persistStateImmediate(updateUsers = false) {
         if (!response.ok) {
             throw new Error(`Save failed with status ${response.status}`);
         }
+        saveStateToLocalStorage();
         return true;
     } catch (e) {
-        console.error("Failed to save to database, data kept in local storage.", e);
+        console.error("Failed to save to database.", e);
         dbOnline = false;
+        updateDatabaseStatus();
+        scheduleDatabaseReconnect();
         return false;
     }
 }
@@ -194,6 +232,10 @@ async function persistState(updateUsers = false) {
 }
 
 function saveState(updateUsers = false) {
+    if (!dbOnline) {
+        updateDatabaseStatus();
+        return;
+    }
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         persistState(updateUsers);
@@ -202,13 +244,33 @@ function saveState(updateUsers = false) {
 
 function updateDatabaseStatus() {
     const statusEl = document.getElementById("db-connection-status");
-    if (!statusEl) return;
+    const bannerEl = document.getElementById("db-offline-banner");
 
     if (dbOnline) {
-        statusEl.innerHTML = '<span class="badge badge-success"><i class="fa-solid fa-database"></i> Connected to SQLite database</span>';
-    } else {
-        statusEl.innerHTML = '<span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> Offline mode (browser storage only)</span>';
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="badge badge-success"><i class="fa-solid fa-database"></i> Connected to SQLite — data shared across all browsers on this PC</span>';
+        }
+        if (bannerEl) {
+            bannerEl.style.display = "none";
+        }
+        const loginStatus = document.getElementById("login-db-status");
+        if (loginStatus) {
+            loginStatus.innerHTML = '<span style="color: var(--success);">Database connected — data saves for all browsers</span>';
+        }
+        return;
     }
+
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> Cannot reach API — check api-config.js and that the server at 202.164.150.65 is running (npm start)</span>';
+    }
+    if (bannerEl) {
+        bannerEl.style.display = "flex";
+    }
+    const loginStatus = document.getElementById("login-db-status");
+    if (loginStatus) {
+        loginStatus.innerHTML = '<span style="color: var(--danger);">API offline — configure laela-api-base or run npm start</span>';
+    }
+    scheduleDatabaseReconnect();
 }
 
 // Router & Switching Tabs

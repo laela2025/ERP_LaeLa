@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- API URL for GitHub Pages is set in api-config.js (not PostgreSQL port 27010) -->
+    <meta name="laela-api-base" content="">
     <title>LaeLa Kids Wear - ERP Store Management System</title>
     <!-- CSS File Link -->
     <link rel="stylesheet" href="styles.css">
@@ -37,6 +39,7 @@
                 <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
                     <i class="fa-solid fa-right-to-bracket"></i> Authenticate & Enter
                 </button>
+                <p id="login-db-status" style="margin-top: 16px; font-size: 0.85rem; text-align: center; color: var(--text-secondary);"></p>
             </form>
 
         </div>
@@ -128,6 +131,17 @@
                     <span class="date-indicator" id="current-date">June 12, 2026</span>
                 </div>
             </header>
+
+            <div id="db-offline-banner" class="db-offline-banner" style="display: none;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <div>
+                    <strong>Database not connected.</strong>
+                    Data entered now is <em>not</em> saved to the store database and will not appear in other browsers.
+                    On this PC run <code>npm start</code> in PowerShell, then open
+                    <a href="http://localhost:3001" style="color: inherit; font-weight: 700;">http://localhost:3001</a>
+                    (do not use erp.laela.online for daily data entry).
+                </div>
+            </div>
 
             <!-- Dashboard Content Container -->
             <div class="content-body">
@@ -720,7 +734,10 @@
                             <span class="badge badge-secondary">Checking database...</span>
                         </p>
                         <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem; line-height: 1.6;">
-                            Store data is persisted in a local SQLite database when the API server is running. Backup downloads include business data (products, sales, stock, etc.). User accounts and roles are never included in backups and are always kept on this machine.
+                            <strong>erp.laela.online</strong> (GitHub Pages) is the frontend only. Data is stored in
+                            <strong>PostgreSQL on 202.164.150.65</strong> via the API at
+                            <strong>api.laela.online</strong> (configured in <code>api-config.js</code>).
+                            The browser never connects to PostgreSQL port 27010 directly.
                         </p>
                         
                         <div style="display: flex; gap: 16px; margin-bottom: 32px;">
@@ -1011,6 +1028,7 @@
     </div>
 
     <!-- App Logic File Link -->
+    <script src="api-config.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

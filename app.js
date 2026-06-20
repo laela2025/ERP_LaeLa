@@ -93,6 +93,7 @@ let dbOnline = false;
 let reconnectTimer = null;
 let saveChain = Promise.resolve();
 let lastApiError = "";
+let inwardCostEdited = false;
 
 function costPriceMatches(a, b) {
     return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
@@ -657,6 +658,16 @@ function renderStockTable() {
         const matchesSearch = p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.size.toLowerCase().includes(q);
         const matchesCategory = catFilter === "" || p.category === catFilter;
         return matchesSearch && matchesCategory;
+    }).sort((a, b) => {
+        if (a.sku !== b.sku) {
+            return a.sku.localeCompare(b.sku);
+        }
+        return (a.costPrice || 0) - (b.costPrice || 0);
+    });
+
+    const skuBatchCounts = {};
+    state.products.forEach(p => {
+        skuBatchCounts[p.sku] = (skuBatchCounts[p.sku] || 0) + 1;
     });
 
     if (filtered.length === 0) {
@@ -672,10 +683,15 @@ function renderStockTable() {
             statusBadge = `<span class="badge badge-warning">Low Stock</span>`;
         }
 
+        const multiBatch = skuBatchCounts[p.sku] > 1;
+        const nameCell = multiBatch
+            ? `<strong>${p.name}</strong><br><small style="color:var(--text-muted);">Purchase batch @ ${fmtCurr(p.costPrice)}</small>`
+            : `<strong>${p.name}</strong>`;
+
         tbody.innerHTML += `
             <tr>
                 <td><code>${p.sku}</code></td>
-                <td><strong>${p.name}</strong></td>
+                <td>${nameCell}</td>
                 <td>${p.category}</td>
                 <td><span class="badge badge-info">${p.size}</span></td>
                 <td>${fmtCurr(p.costPrice)}</td>
@@ -815,38 +831,61 @@ async function deleteProduct(id) {
 }
 
 // Inward Stock Modal Operations
-function openStockInwardModal() {
+function populateInwardProductSelect() {
     const select = document.getElementById("inward-product-select");
     select.innerHTML = "";
 
+    const bySku = new Map();
+    state.products.forEach(p => {
+        if (!bySku.has(p.sku)) {
+            bySku.set(p.sku, p);
+        }
+    });
+
+    Array.from(bySku.values())
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(p => {
+            const batchCount = state.products.filter(item => item.sku === p.sku).length;
+            const batchNote = batchCount > 1 ? ` — ${batchCount} cost batches` : "";
+            select.innerHTML += `<option value="${p.id}">${p.name} (${p.sku}) · Size: ${p.size}${batchNote}</option>`;
+        });
+}
+
+function openStockInwardModal() {
     if (state.products.length === 0) {
         alert("Please create a product first before performing stock inward purchases!");
         return;
     }
 
-    state.products.forEach(p => {
-        select.innerHTML += `<option value="${p.id}">${p.name} (${p.sku}) [Size: ${p.size}, Cost: ${fmtCurr(p.costPrice)}] - Stock: ${p.stock}</option>`;
-    });
-
     document.getElementById("stock-inward-form").reset();
+    populateInwardProductSelect();
+    inwardCostEdited = false;
 
-    // Default purchase date/time to "now" (local time) for inward stock log.
     const dt = new Date();
     dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
     const nowLocal = dt.toISOString().slice(0, 16);
     const inwardDtInput = document.getElementById("inward-date-time");
-    if (inwardDtInput) inwardDtInput.value = nowLocal;
-    
-    // Auto populate unit cost from first product
-    const firstProd = state.products[0];
-    document.getElementById("inward-cost").value = firstProd.costPrice;
-    
+    if (inwardDtInput) {
+        inwardDtInput.value = nowLocal;
+    }
+
+    const costInput = document.getElementById("inward-cost");
+    costInput.value = "";
+    costInput.placeholder = "Enter this purchase cost (e.g. 30)";
+    costInput.oninput = () => {
+        inwardCostEdited = true;
+    };
+
+    const select = document.getElementById("inward-product-select");
     select.onchange = function() {
         const prod = state.products.find(p => p.id === this.value);
-        if (prod) {
-            document.getElementById("inward-cost").value = prod.costPrice;
+        if (!prod || inwardCostEdited) {
+            return;
         }
+        const batches = state.products.filter(p => p.sku === prod.sku).map(p => fmtCurr(p.costPrice)).join(", ");
+        costInput.placeholder = `Enter this purchase cost (existing batches: ${batches})`;
     };
+    select.onchange();
 
     document.getElementById("stock-inward-modal").classList.add("active");
 }
@@ -886,39 +925,38 @@ async function saveStockInward(event) {
     }
     const purchaseDateTimeIso = purchaseDate.toISOString();
 
-    const product = state.products.find(p => p.id === prodId);
-    if (!product) {
+    const template = state.products.find(p => p.id === prodId);
+    if (!template) {
         alert("Selected product not found. Refresh the page and try again.");
         return;
     }
 
-    let targetProduct = state.products.find(p => p.sku === product.sku && costPriceMatches(p.costPrice, costPrice));
-    let targetProdId = prodId;
-    const createdNewBatch = !targetProduct || targetProduct.id !== prodId;
+    // Same SKU, different purchase cost = separate stock batch (find existing or create new)
+    let targetProduct = state.products.find(p => p.sku === template.sku && costPriceMatches(p.costPrice, costPrice));
+    let createdNewBatch = false;
 
     if (targetProduct) {
         targetProduct.stock += qty;
-        targetProdId = targetProduct.id;
     } else {
+        createdNewBatch = true;
         const newId = "p_" + Date.now();
         targetProduct = {
             id: newId,
-            name: product.name,
-            sku: product.sku,
-            category: product.category,
-            size: product.size,
+            name: template.name,
+            sku: template.sku,
+            category: template.category,
+            size: template.size,
             costPrice: costPrice,
-            sellingPrice: product.sellingPrice,
+            sellingPrice: template.sellingPrice,
             stock: qty
         };
         state.products.push(targetProduct);
-        targetProdId = newId;
     }
 
     state.purchases.push({
-        id: "pur_" + Date.now(),
+        id: "pur_" + (Date.now() + 1),
         dateTime: purchaseDateTimeIso,
-        productId: targetProdId,
+        productId: targetProduct.id,
         productName: targetProduct.name,
         sku: targetProduct.sku,
         size: targetProduct.size,
@@ -939,9 +977,9 @@ async function saveStockInward(event) {
     closeStockInwardModal();
     renderStockTable();
     const batchNote = createdNewBatch
-        ? ` A new batch row was created for SKU ${targetProduct.sku} at cost ${fmtCurr(costPrice)}.`
-        : "";
-    alert(`Successfully saved to PostgreSQL: ${qty} units added to ${targetProduct.name}.${batchNote} Total stock for this batch: ${targetProduct.stock}.`);
+        ? `\n\nNew batch created for ${template.sku} at cost ${fmtCurr(costPrice)}. Check the stock table for a second row with "Purchase batch @ ${fmtCurr(costPrice)}".`
+        : `\n\nStock added to existing batch at cost ${fmtCurr(costPrice)}.`;
+    alert(`Successfully saved to PostgreSQL: ${qty} units of ${template.name} (${template.sku}).${batchNote}\n\nTotal stock in this batch: ${targetProduct.stock}.`);
 }
 
 // ==========================================

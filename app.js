@@ -839,19 +839,11 @@ function populateInwardProductSelect() {
     const select = document.getElementById("inward-product-select");
     select.innerHTML = "";
 
-    const bySku = new Map();
-    state.products.forEach(p => {
-        if (!bySku.has(p.sku)) {
-            bySku.set(p.sku, p);
-        }
-    });
-
-    Array.from(bySku.values())
-        .sort((a, b) => a.name.localeCompare(b.name))
+    state.products
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name) || (a.costPrice || 0) - (b.costPrice || 0))
         .forEach(p => {
-            const batchCount = state.products.filter(item => item.sku === p.sku).length;
-            const batchNote = batchCount > 1 ? ` — ${batchCount} cost batches` : "";
-            select.innerHTML += `<option value="${p.id}">${p.name} (${p.sku}) · Size: ${p.size}${batchNote}</option>`;
+            select.innerHTML += `<option value="${p.id}">${p.name} (${p.sku}) [Size: ${p.size}, Cost: ${fmtCurr(p.costPrice)}] - Stock: ${p.stock}</option>`;
         });
 }
 

@@ -48,6 +48,10 @@ function initSchema() {
             name TEXT PRIMARY KEY
         );
 
+        CREATE TABLE IF NOT EXISTS expense_categories (
+            name TEXT PRIMARY KEY
+        );
+
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -129,6 +133,7 @@ function needsSeedData() {
         SELECT
             (SELECT COUNT(*) FROM products)  AS productsCount,
             (SELECT COUNT(*) FROM categories) AS categoriesCount,
+            (SELECT COUNT(*) FROM expense_categories) AS expenseCategoriesCount,
             (SELECT COUNT(*) FROM users)     AS usersCount,
             (SELECT COUNT(*) FROM expenses)  AS expensesCount,
             (SELECT COUNT(*) FROM purchases) AS purchasesCount,
@@ -139,6 +144,7 @@ function needsSeedData() {
     return (
         counts.productsCount === 0
         && counts.categoriesCount === 0
+        && counts.expenseCategoriesCount === 0
         && counts.usersCount === 0
         && counts.expensesCount === 0
         && counts.purchasesCount === 0
@@ -179,6 +185,7 @@ export async function saveState(state, { updateUsers = true } = {}) {
         db.prepare("DELETE FROM expenses").run();
         db.prepare("DELETE FROM products").run();
         db.prepare("DELETE FROM categories").run();
+        db.prepare("DELETE FROM expense_categories").run();
         if (updateUsers) {
             db.prepare("DELETE FROM users").run();
         }
@@ -194,6 +201,11 @@ export async function saveState(state, { updateUsers = true } = {}) {
         const insertCategory = db.prepare("INSERT INTO categories (name) VALUES (?)");
         for (const category of state.categories || []) {
             insertCategory.run(category);
+        }
+
+        const insertExpenseCategory = db.prepare("INSERT INTO expense_categories (name) VALUES (?)");
+        for (const category of state.expenseCategories || []) {
+            insertExpenseCategory.run(category);
         }
 
         const insertUser = db.prepare(`
@@ -248,6 +260,7 @@ export async function loadState() {
     `).all();
 
     const categories = db.prepare("SELECT name FROM categories ORDER BY name").all().map((row) => row.name);
+    const expenseCategories = db.prepare("SELECT name FROM expense_categories ORDER BY name").all().map((row) => row.name);
 
     const users = db.prepare(`
         SELECT id, name, username, password, role, status
@@ -330,6 +343,7 @@ export async function loadState() {
         expenses,
         purchases,
         categories,
+        expenseCategories,
         users
     };
 }
@@ -347,6 +361,7 @@ export async function resetDatabase() {
         expenses: [],
         purchases: [],
         categories: [],
+        expenseCategories: [],
         users
     });
     return loadState();

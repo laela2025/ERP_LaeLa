@@ -49,6 +49,10 @@ async function initSchema() {
             name TEXT PRIMARY KEY
         );
 
+        CREATE TABLE IF NOT EXISTS expense_categories (
+            name TEXT PRIMARY KEY
+        );
+
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -155,6 +159,7 @@ async function needsSeedData() {
         SELECT
             (SELECT COUNT(*)::int FROM products)  AS "productsCount",
             (SELECT COUNT(*)::int FROM categories) AS "categoriesCount",
+            (SELECT COUNT(*)::int FROM expense_categories) AS "expenseCategoriesCount",
             (SELECT COUNT(*)::int FROM users)     AS "usersCount",
             (SELECT COUNT(*)::int FROM expenses)  AS "expensesCount",
             (SELECT COUNT(*)::int FROM purchases) AS "purchasesCount",
@@ -165,6 +170,7 @@ async function needsSeedData() {
     return (
         counts.productsCount === 0
         && counts.categoriesCount === 0
+        && counts.expenseCategoriesCount === 0
         && counts.usersCount === 0
         && counts.expensesCount === 0
         && counts.purchasesCount === 0
@@ -205,6 +211,7 @@ export async function saveState(state, { updateUsers = true } = {}) {
         await client.query("DELETE FROM expenses");
         await client.query("DELETE FROM products");
         await client.query("DELETE FROM categories");
+        await client.query("DELETE FROM expense_categories");
         if (updateUsers) {
             await client.query("DELETE FROM users");
         }
@@ -219,6 +226,10 @@ export async function saveState(state, { updateUsers = true } = {}) {
 
         for (const category of state.categories || []) {
             await client.query("INSERT INTO categories (name) VALUES ($1)", [category]);
+        }
+
+        for (const category of state.expenseCategories || []) {
+            await client.query("INSERT INTO expense_categories (name) VALUES ($1)", [category]);
         }
 
         if (updateUsers) {
@@ -280,6 +291,7 @@ export async function loadState() {
     `);
 
     const categoriesResult = await pool.query("SELECT name FROM categories ORDER BY name");
+    const expenseCategoriesResult = await pool.query("SELECT name FROM expense_categories ORDER BY name");
     const usersResult = await pool.query(`
         SELECT id, name, username, password, role, status
         FROM users
@@ -357,6 +369,7 @@ export async function loadState() {
         expenses: expensesResult.rows,
         purchases: purchasesResult.rows,
         categories: categoriesResult.rows.map((row) => row.name),
+        expenseCategories: expenseCategoriesResult.rows.map((row) => row.name),
         users: usersResult.rows
     };
 }
@@ -374,6 +387,7 @@ export async function resetDatabase() {
         expenses: [],
         purchases: [],
         categories: [],
+        expenseCategories: [],
         users: usersResult.rows
     });
     return loadState();

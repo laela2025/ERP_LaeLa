@@ -57,6 +57,7 @@ export const SEED_DATA = {
         { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", notes: "Delivery cardboard box purchase (50 units)" }
     ],
     categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
+    expenseCategories: ["Rent", "Salaries", "Utilities", "Marketing", "Packaging", "Repairs", "Other"],
     users: [
         { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
         { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },

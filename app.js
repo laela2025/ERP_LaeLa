@@ -5,8 +5,19 @@ let state = {
     expenses: [],
     purchases: [],
     categories: [],
+    expenseCategories: [],
     users: []
 };
+
+const DEFAULT_EXPENSE_CATEGORIES = [
+    "Rent",
+    "Salaries",
+    "Utilities",
+    "Marketing",
+    "Packaging",
+    "Repairs",
+    "Other"
+];
 
 // Seed Mock Data if LocalStorage is empty
 const SEED_DATA = {
@@ -68,6 +79,7 @@ const SEED_DATA = {
         { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", notes: "Delivery cardboard box purchase (50 units)" }
     ],
     categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
+    expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
     users: [
         { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
         { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
@@ -105,6 +117,7 @@ function emptyState() {
         expenses: [],
         purchases: [],
         categories: [],
+        expenseCategories: [],
         users: []
     };
 }
@@ -147,6 +160,9 @@ function normalizeStateShape(nextState) {
     if (nextState.categories == null) {
         nextState.categories = ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"];
     }
+    if (nextState.expenseCategories == null) {
+        nextState.expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+    }
     if (nextState.users == null) {
         nextState.users = [];
     }
@@ -188,6 +204,7 @@ async function loadState() {
             loadStateFromLocalStorage();
         }
         enrichPurchasesWithMrp();
+        ensureExpenseCategoriesComplete();
         updateDatabaseStatus();
         scheduleDatabaseReconnect();
         return;
@@ -214,6 +231,7 @@ async function loadState() {
             }
 
             enrichPurchasesWithMrp();
+            ensureExpenseCategoriesComplete();
             saveStateToLocalStorage();
             updateDatabaseStatus();
             return;
@@ -230,6 +248,7 @@ async function loadState() {
         loadStateFromLocalStorage();
     }
     enrichPurchasesWithMrp();
+    ensureExpenseCategoriesComplete();
     updateDatabaseStatus();
     scheduleDatabaseReconnect();
 }
@@ -277,7 +296,8 @@ async function persistStateImmediate(updateUsers = false) {
                 sales: state.sales,
                 expenses: state.expenses,
                 purchases: state.purchases,
-                categories: state.categories
+                categories: state.categories,
+                expenseCategories: state.expenseCategories
             };
             const headers = { "Content-Type": "application/json" };
             if (updateUsers) {
@@ -439,6 +459,7 @@ function switchTab(tabId) {
         updateCartTotals();
     } else if (tabId === "expenses") {
         renderExpenses();
+        populateExpenseCategoryDropdown();
         // set default date to today
         document.getElementById("expense-date").value = new Date().toISOString().substring(0, 10);
     } else if (tabId === "tags") {
@@ -1344,6 +1365,116 @@ function closeReceiptModal() {
 // ==========================================
 // 4. EXPENSES TRACKER LOGIC
 // ==========================================
+function ensureExpenseCategoriesComplete() {
+    if (!Array.isArray(state.expenseCategories) || state.expenseCategories.length === 0) {
+        state.expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+    }
+    for (const expense of state.expenses || []) {
+        const cat = (expense.category || "").trim();
+        if (!cat) {
+            continue;
+        }
+        if (!state.expenseCategories.some(c => c.toLowerCase() === cat.toLowerCase())) {
+            state.expenseCategories.push(cat);
+        }
+    }
+}
+
+function populateExpenseCategoryDropdown() {
+    const select = document.getElementById("expense-category");
+    if (!select) {
+        return;
+    }
+    const selected = select.value;
+    select.innerHTML = '<option value="">Select Category</option>';
+    state.expenseCategories.forEach(cat => {
+        select.innerHTML += `<option value="${cat}">${cat}</option>`;
+    });
+    if (selected && state.expenseCategories.includes(selected)) {
+        select.value = selected;
+    }
+}
+
+function openExpenseCategoriesModal() {
+    renderExpenseCategoriesList();
+    document.getElementById("expense-category-form").reset();
+    document.getElementById("expense-categories-modal").classList.add("active");
+}
+
+function closeExpenseCategoriesModal() {
+    document.getElementById("expense-categories-modal").classList.remove("active");
+    populateExpenseCategoryDropdown();
+}
+
+function renderExpenseCategoriesList() {
+    const tbody = document.getElementById("expense-categories-list-tbody");
+    if (!tbody) {
+        return;
+    }
+    tbody.innerHTML = "";
+
+    state.expenseCategories.forEach(cat => {
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${cat}</strong></td>
+                <td style="text-align: right;">
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpenseCategory('${cat.replace(/'/g, "\\'")}')" title="Delete Category">
+                        <i class="fa-solid fa-trash" style="font-size:0.75rem;"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+async function saveExpenseCategory(event) {
+    event.preventDefault();
+    if (!requirePostgresConnection("save expense category")) {
+        return;
+    }
+    const catName = document.getElementById("new-expense-category-name").value.trim();
+    if (catName === "") {
+        return;
+    }
+    if (state.expenseCategories.some(cat => cat.toLowerCase() === catName.toLowerCase())) {
+        alert("Error: Category already exists!");
+        return;
+    }
+
+    state.expenseCategories.push(catName);
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Category was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
+
+    document.getElementById("expense-category-form").reset();
+    renderExpenseCategoriesList();
+    populateExpenseCategoryDropdown();
+}
+
+async function deleteExpenseCategory(catName) {
+    if (!requirePostgresConnection("delete expense category")) {
+        return;
+    }
+    const inUse = state.expenses.some(e => e.category.toLowerCase() === catName.toLowerCase());
+    if (inUse) {
+        alert(`Cannot delete category "${catName}". It is used by existing expense entries.`);
+        return;
+    }
+
+    if (confirm(`Are you sure you want to delete expense category "${catName}"?`)) {
+        state.expenseCategories = state.expenseCategories.filter(cat => cat !== catName);
+        const saved = await saveStateOrRevert(false);
+        if (!saved) {
+            alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+            return;
+        }
+        renderExpenseCategoriesList();
+        populateExpenseCategoryDropdown();
+    }
+}
+
 function renderExpenses() {
     const tbody = document.getElementById("expenses-table-tbody");
     tbody.innerHTML = "";

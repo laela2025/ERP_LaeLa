@@ -72,6 +72,9 @@ app.put("/api/state", async (req, res) => {
 
     try {
         const currentState = await loadState();
+        if (!Array.isArray(nextState.expenseCategories)) {
+            nextState.expenseCategories = currentState.expenseCategories || [];
+        }
         if (!updateUsers) {
             nextState.users = currentState.users;
         } else if (!Array.isArray(nextState.users)) {

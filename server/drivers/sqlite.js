@@ -66,6 +66,9 @@ function initSchema() {
             date TEXT NOT NULL,
             amount REAL NOT NULL,
             category TEXT NOT NULL,
+            description TEXT,
+            payment_mode TEXT,
+            remarks TEXT,
             notes TEXT
         );
 
@@ -123,6 +126,22 @@ function ensureSchemaCompatibility() {
         if (!cols.includes("selling_price")) {
             db.exec("ALTER TABLE purchases ADD COLUMN selling_price REAL");
         }
+
+        const expenseCols = db.prepare("PRAGMA table_info(expenses)").all().map((c) => c.name);
+        if (!expenseCols.includes("description")) {
+            db.exec("ALTER TABLE expenses ADD COLUMN description TEXT");
+        }
+        if (!expenseCols.includes("payment_mode")) {
+            db.exec("ALTER TABLE expenses ADD COLUMN payment_mode TEXT");
+        }
+        if (!expenseCols.includes("remarks")) {
+            db.exec("ALTER TABLE expenses ADD COLUMN remarks TEXT");
+        }
+        db.exec(`
+            UPDATE expenses
+            SET description = notes
+            WHERE (description IS NULL OR description = '') AND notes IS NOT NULL AND notes <> ''
+        `);
     } catch (e) {
         console.warn("Schema compatibility check failed:", e);
     }
@@ -219,11 +238,21 @@ export async function saveState(state, { updateUsers = true } = {}) {
         }
 
         const insertExpense = db.prepare(`
-            INSERT INTO expenses (id, date, amount, category, notes)
-            VALUES (@id, @date, @amount, @category, @notes)
+            INSERT INTO expenses (id, date, amount, category, description, payment_mode, remarks, notes)
+            VALUES (@id, @date, @amount, @category, @description, @paymentMode, @remarks, @notes)
         `);
         for (const expense of state.expenses || []) {
-            insertExpense.run(expense);
+            const description = expense.description ?? expense.notes ?? null;
+            insertExpense.run({
+                id: expense.id,
+                date: expense.date,
+                amount: expense.amount,
+                category: expense.category,
+                description,
+                paymentMode: expense.paymentMode ?? null,
+                remarks: expense.remarks ?? null,
+                notes: description
+            });
         }
 
         const insertPurchase = db.prepare(`
@@ -269,7 +298,15 @@ export async function loadState() {
     `).all();
 
     const expenses = db.prepare(`
-        SELECT id, date, amount, category, notes
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            COALESCE(description, notes) AS description,
+            payment_mode AS paymentMode,
+            remarks,
+            notes
         FROM expenses
         ORDER BY date DESC
     `).all();

@@ -19,6 +19,21 @@ const DEFAULT_EXPENSE_CATEGORIES = [
     "Other"
 ];
 
+function normalizeExpenseRecord(expense) {
+    const description = (expense.description || expense.notes || "").trim();
+    return {
+        ...expense,
+        description,
+        paymentMode: (expense.paymentMode || "").trim(),
+        remarks: (expense.remarks || "").trim(),
+        notes: description
+    };
+}
+
+function normalizeExpensesList(expenses) {
+    return (expenses || []).map(normalizeExpenseRecord);
+}
+
 // Seed Mock Data if LocalStorage is empty
 const SEED_DATA = {
     products: [
@@ -74,9 +89,9 @@ const SEED_DATA = {
         }
     ],
     expenses: [
-        { id: "e1", date: "2026-06-02", amount: 1500, category: "Rent", notes: "June Rent for Shop Space" },
-        { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", notes: "Instagram Kids Wear Ad Boost" },
-        { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", notes: "Delivery cardboard box purchase (50 units)" }
+        { id: "e1", date: "2026-06-02", amount: 1500, category: "Rent", description: "June Rent for Shop Space", paymentMode: "Bank Transfer", remarks: "Paid to landlord" },
+        { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", description: "Instagram Kids Wear Ad Boost", paymentMode: "UPI", remarks: "" },
+        { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", description: "Delivery cardboard box purchase (50 units)", paymentMode: "Cash", remarks: "Local supplier" }
     ],
     categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
     expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
@@ -204,6 +219,7 @@ async function loadState() {
             loadStateFromLocalStorage();
         }
         enrichPurchasesWithMrp();
+        state.expenses = normalizeExpensesList(state.expenses);
         ensureExpenseCategoriesComplete();
         updateDatabaseStatus();
         scheduleDatabaseReconnect();
@@ -231,6 +247,7 @@ async function loadState() {
             }
 
             enrichPurchasesWithMrp();
+            state.expenses = normalizeExpensesList(state.expenses);
             ensureExpenseCategoriesComplete();
             saveStateToLocalStorage();
             updateDatabaseStatus();
@@ -248,6 +265,7 @@ async function loadState() {
         loadStateFromLocalStorage();
     }
     enrichPurchasesWithMrp();
+    state.expenses = normalizeExpensesList(state.expenses);
     ensureExpenseCategoriesComplete();
     updateDatabaseStatus();
     scheduleDatabaseReconnect();
@@ -1386,7 +1404,7 @@ function populateExpenseCategoryDropdown() {
         return;
     }
     const selected = select.value;
-    select.innerHTML = '<option value="">Select Category</option>';
+    select.innerHTML = '<option value="">Select Expense Type</option>';
     state.expenseCategories.forEach(cat => {
         select.innerHTML += `<option value="${cat}">${cat}</option>`;
     });
@@ -1437,7 +1455,7 @@ async function saveExpenseCategory(event) {
         return;
     }
     if (state.expenseCategories.some(cat => cat.toLowerCase() === catName.toLowerCase())) {
-        alert("Error: Category already exists!");
+        alert("Error: Expense type already exists!");
         return;
     }
 
@@ -1459,11 +1477,11 @@ async function deleteExpenseCategory(catName) {
     }
     const inUse = state.expenses.some(e => e.category.toLowerCase() === catName.toLowerCase());
     if (inUse) {
-        alert(`Cannot delete category "${catName}". It is used by existing expense entries.`);
+        alert(`Cannot delete expense type "${catName}". It is used by existing expense entries.`);
         return;
     }
 
-    if (confirm(`Are you sure you want to delete expense category "${catName}"?`)) {
+    if (confirm(`Are you sure you want to delete expense type "${catName}"?`)) {
         state.expenseCategories = state.expenseCategories.filter(cat => cat !== catName);
         const saved = await saveStateOrRevert(false);
         if (!saved) {
@@ -1475,6 +1493,10 @@ async function deleteExpenseCategory(catName) {
     }
 }
 
+function getExpenseDescription(expense) {
+    return expense.description || expense.notes || "";
+}
+
 function renderExpenses() {
     const tbody = document.getElementById("expenses-table-tbody");
     tbody.innerHTML = "";
@@ -1482,7 +1504,7 @@ function renderExpenses() {
     const sorted = [...state.expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
 
     if (sorted.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No expenses recorded.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);">No expenses recorded.</td></tr>`;
         return;
     }
 
@@ -1491,8 +1513,10 @@ function renderExpenses() {
             <tr>
                 <td>${new Date(e.date).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'})}</td>
                 <td><span class="badge badge-warning">${e.category}</span></td>
-                <td>${e.notes || '—'}</td>
+                <td>${getExpenseDescription(e) || '—'}</td>
                 <td style="font-weight:700; color:var(--danger);">${fmtCurr(e.amount)}</td>
+                <td>${e.paymentMode || '—'}</td>
+                <td>${e.remarks || '—'}</td>
                 <td>
                     <button class="btn btn-danger btn-sm btn-icon" onclick="deleteExpense('${e.id}')" title="Delete Log">
                         <i class="fa-solid fa-trash" style="font-size:0.75rem;"></i>
@@ -1509,17 +1533,21 @@ async function saveExpense(event) {
         return;
     }
     const date = document.getElementById("expense-date").value;
-    const amount = parseFloat(document.getElementById("expense-amount").value) || 0;
     const category = document.getElementById("expense-category").value;
-    const notes = document.getElementById("expense-notes").value.trim();
+    const description = document.getElementById("expense-description").value.trim();
+    const amount = parseFloat(document.getElementById("expense-amount").value) || 0;
+    const paymentMode = document.getElementById("expense-payment-mode").value;
+    const remarks = document.getElementById("expense-remarks").value.trim();
 
-    const newExpense = {
+    const newExpense = normalizeExpenseRecord({
         id: "exp_" + Date.now(),
         date,
         amount,
         category,
-        notes
-    };
+        description,
+        paymentMode,
+        remarks
+    });
 
     state.expenses.push(newExpense);
     const saved = await saveStateOrRevert(false);
@@ -1885,7 +1913,7 @@ function renderReportExpensesTable(filteredExpenses) {
     }
 
     if (filteredExpenses.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No expenses recorded for selected dates.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">No expenses recorded for selected dates.</td></tr>`;
         return;
     }
 
@@ -1894,8 +1922,10 @@ function renderReportExpensesTable(filteredExpenses) {
             <tr>
                 <td>${new Date(e.date + "T12:00:00").toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                 <td><span class="badge badge-warning">${e.category}</span></td>
-                <td>${e.notes || '—'}</td>
+                <td>${getExpenseDescription(e) || '—'}</td>
                 <td style="font-weight:700; color:var(--danger);">${fmtCurr(e.amount)}</td>
+                <td>${e.paymentMode || '—'}</td>
+                <td>${e.remarks || '—'}</td>
             </tr>
         `;
     });
@@ -2202,11 +2232,13 @@ function exportCSVReport(type) {
             return eDate >= range.start && eDate <= range.end;
         });
 
-        csvContent += "Date,Category,Notes,Amount\n";
+        csvContent += "Date,Expense Type,Description,Amount,Payment Mode,Remarks\n";
         sortExpensesByDate(filteredExpenses).forEach(e => {
             const dateStr = new Date(e.date + "T12:00:00").toLocaleDateString('en-IN');
-            const notes = (e.notes || "").replace(/"/g, '""');
-            csvContent += `${dateStr},${e.category},"${notes}",${e.amount}\n`;
+            const description = (getExpenseDescription(e) || "").replace(/"/g, '""');
+            const remarks = (e.remarks || "").replace(/"/g, '""');
+            const paymentMode = (e.paymentMode || "").replace(/"/g, '""');
+            csvContent += `${dateStr},${e.category},"${description}",${e.amount},"${paymentMode}","${remarks}"\n`;
         });
     }
     else if (type === 'margins') {
@@ -2272,10 +2304,12 @@ function exportStateForBackup(sourceState) {
 }
 
 function restoreStateFromBackup(parsed, currentUsers) {
-    return normalizeStateShape({
+    const restored = normalizeStateShape({
         ...parsed,
         users: currentUsers
     });
+    restored.expenses = normalizeExpensesList(restored.expenses);
+    return restored;
 }
 
 function exportBackup() {

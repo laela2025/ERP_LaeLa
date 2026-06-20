@@ -52,9 +52,9 @@ export const SEED_DATA = {
         }
     ],
     expenses: [
-        { id: "e1", date: "2026-06-02", amount: 1500, category: "Rent", notes: "June Rent for Shop Space" },
-        { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", notes: "Instagram Kids Wear Ad Boost" },
-        { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", notes: "Delivery cardboard box purchase (50 units)" }
+        { id: "e1", date: "2026-06-02", amount: 1500, category: "Rent", description: "June Rent for Shop Space", paymentMode: "Bank Transfer", remarks: "Paid to landlord" },
+        { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", description: "Instagram Kids Wear Ad Boost", paymentMode: "UPI", remarks: "" },
+        { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", description: "Delivery cardboard box purchase (50 units)", paymentMode: "Cash", remarks: "Local supplier" }
     ],
     categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
     expenseCategories: ["Rent", "Salaries", "Utilities", "Marketing", "Packaging", "Repairs", "Other"],

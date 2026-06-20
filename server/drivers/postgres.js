@@ -67,6 +67,9 @@ async function initSchema() {
             date TEXT NOT NULL,
             amount DOUBLE PRECISION NOT NULL,
             category TEXT NOT NULL,
+            description TEXT,
+            payment_mode TEXT,
+            remarks TEXT,
             notes TEXT
         );
 
@@ -152,6 +155,28 @@ async function ensureSchemaCompatibility() {
             console.warn("Could not add products_sku_cost_price_key:", error.message);
         }
     }
+
+    const expenseColumnMigrations = [
+        { name: "description", type: "TEXT" },
+        { name: "payment_mode", type: "TEXT" },
+        { name: "remarks", type: "TEXT" }
+    ];
+    for (const column of expenseColumnMigrations) {
+        const { rows } = await pool.query(
+            `SELECT column_name
+             FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = $1`,
+            [column.name]
+        );
+        if (rows.length === 0) {
+            await pool.query(`ALTER TABLE expenses ADD COLUMN ${column.name} ${column.type}`);
+        }
+    }
+    await pool.query(`
+        UPDATE expenses
+        SET description = notes
+        WHERE (description IS NULL OR description = '') AND notes IS NOT NULL AND notes <> ''
+    `);
 }
 
 async function needsSeedData() {
@@ -243,10 +268,20 @@ export async function saveState(state, { updateUsers = true } = {}) {
         }
 
         for (const expense of state.expenses || []) {
+            const description = expense.description ?? expense.notes ?? null;
             await client.query(
-                `INSERT INTO expenses (id, date, amount, category, notes)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [expense.id, expense.date, expense.amount, expense.category, expense.notes ?? null]
+                `INSERT INTO expenses (id, date, amount, category, description, payment_mode, remarks, notes)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [
+                    expense.id,
+                    expense.date,
+                    expense.amount,
+                    expense.category,
+                    description,
+                    expense.paymentMode ?? null,
+                    expense.remarks ?? null,
+                    description
+                ]
             );
         }
 
@@ -298,7 +333,15 @@ export async function loadState() {
         ORDER BY name
     `);
     const expensesResult = await pool.query(`
-        SELECT id, date, amount, category, notes
+        SELECT
+            id,
+            date,
+            amount,
+            category,
+            COALESCE(description, notes) AS description,
+            payment_mode AS "paymentMode",
+            remarks,
+            notes
         FROM expenses
         ORDER BY date DESC
     `);

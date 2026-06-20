@@ -1811,7 +1811,7 @@ function renderReportPurchasesTable(filteredPurchases) {
     tbody.innerHTML = "";
 
     if (filteredPurchases.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">No stock purchase history for selected dates.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; padding:30px; color:var(--text-muted);">No stock purchase history for selected dates.</td></tr>`;
         return;
     }
 
@@ -1832,9 +1832,53 @@ function renderReportPurchasesTable(filteredPurchases) {
                 <td>${mrpCell}</td>
                 <td><span style="font-size:0.8rem; color:var(--text-secondary);">${p.supplier}</span></td>
                 <td style="font-weight:700; color:var(--accent);">${fmtCurr(p.totalOutlay)}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deletePurchaseEntry('${p.id}')" title="Delete inward entry">
+                        <i class="fa-solid fa-trash" style="font-size:0.75rem;"></i>
+                    </button>
+                </td>
             </tr>
         `;
     });
+}
+
+async function deletePurchaseEntry(purchaseId) {
+    if (!requirePostgresConnection("delete inward entry")) {
+        return;
+    }
+
+    const purchase = state.purchases.find(p => p.id === purchaseId);
+    if (!purchase) {
+        alert("Inward entry not found. Refresh the page and try again.");
+        return;
+    }
+
+    const dateStr = new Date(purchase.dateTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const billNote = purchase.billNumber ? `, Bill #${purchase.billNumber}` : "";
+    if (!confirm(`Delete inward entry?\n\n${purchase.productName} (${purchase.sku}) · +${purchase.qty} units · ${dateStr}${billNote}\n\nStock for this batch will be reduced by ${purchase.qty} units.`)) {
+        return;
+    }
+
+    const batch = getStockBatchForPurchase(purchase);
+    if (batch && batch.stock < purchase.qty) {
+        alert(`Cannot delete: this batch only has ${batch.stock} units in stock, but this inward entry added ${purchase.qty}. Some units may have been sold — adjust stock manually first.`);
+        return;
+    }
+
+    if (batch) {
+        batch.stock -= purchase.qty;
+    }
+
+    state.purchases = state.purchases.filter(p => p.id !== purchaseId);
+
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert(`Could not delete inward entry.\n\n${lastApiError || "Check API connection and try again."}`);
+        return;
+    }
+
+    runFinancialReports();
+    renderStockTable();
 }
 
 function renderReportMarginsTable(filteredSales) {

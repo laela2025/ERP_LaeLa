@@ -1728,8 +1728,46 @@ function runFinancialReports() {
     // RENDER SUB-TAB TABLES
     renderReportSalesTable(filteredSales);
     renderReportPurchasesTable(filteredPurchases);
+    renderReportExpensesTable(filteredExpenses);
     renderReportMarginsTable(filteredSales);
     renderReportStockStatusTable();
+}
+
+function sortExpensesByDate(expenses, newestFirst = true) {
+    return expenses.slice().sort((a, b) => {
+        const timeA = new Date(a.date + "T12:00:00").getTime();
+        const timeB = new Date(b.date + "T12:00:00").getTime();
+        return newestFirst ? timeB - timeA : timeA - timeB;
+    });
+}
+
+function renderReportExpensesTable(filteredExpenses) {
+    const tbody = document.getElementById("report-expenses-tbody");
+    const totalEl = document.getElementById("report-expenses-total");
+    tbody.innerHTML = "";
+
+    const totalAmount = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    if (totalEl) {
+        totalEl.textContent = filteredExpenses.length
+            ? `(Total: ${fmtCurr(totalAmount)})`
+            : "";
+    }
+
+    if (filteredExpenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No expenses recorded for selected dates.</td></tr>`;
+        return;
+    }
+
+    sortExpensesByDate(filteredExpenses).forEach(e => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${new Date(e.date + "T12:00:00").toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                <td><span class="badge badge-warning">${e.category}</span></td>
+                <td>${e.notes || '—'}</td>
+                <td style="font-weight:700; color:var(--danger);">${fmtCurr(e.amount)}</td>
+            </tr>
+        `;
+    });
 }
 
 function renderReportSalesTable(filteredSales) {
@@ -2027,6 +2065,19 @@ function exportCSVReport(type) {
             csvContent += `${dateStr},"${bill}",${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${mrp ?? ""},${p.totalOutlay},"${p.supplier}"\n`;
         });
     } 
+    else if (type === 'expenses') {
+        const filteredExpenses = state.expenses.filter(e => {
+            const eDate = new Date(e.date + "T12:00:00");
+            return eDate >= range.start && eDate <= range.end;
+        });
+
+        csvContent += "Date,Category,Notes,Amount\n";
+        sortExpensesByDate(filteredExpenses).forEach(e => {
+            const dateStr = new Date(e.date + "T12:00:00").toLocaleDateString('en-IN');
+            const notes = (e.notes || "").replace(/"/g, '""');
+            csvContent += `${dateStr},${e.category},"${notes}",${e.amount}\n`;
+        });
+    }
     else if (type === 'margins') {
         const filteredSales = state.sales.filter(s => {
             const tDate = new Date(s.dateTime);

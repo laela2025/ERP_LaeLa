@@ -591,6 +591,7 @@
                                 <button class="report-tab-btn active" onclick="switchReportTab('stockstatus')">Stock Status Report</button>
                                 <button class="report-tab-btn" onclick="switchReportTab('sales')">Sales Log Report</button>
                                 <button class="report-tab-btn" onclick="switchReportTab('purchases')">Stock Purchase/Inward Report</button>
+                                <button class="report-tab-btn" onclick="switchReportTab('expenses')">Expense Report</button>
                                 <button class="report-tab-btn" onclick="switchReportTab('margins')">Product Margins & Profitability</button>
                             </div>
 
@@ -683,6 +684,31 @@
                                             </tr>
                                         </thead>
                                         <tbody id="report-purchases-tbody">
+                                            <!-- Dynamic report lines -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Expense Report -->
+                            <div class="card report-table-section" id="report-expenses-section">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                    <h3>Operating Expenses <span id="report-expenses-total" style="font-size:0.9rem; color:var(--warning); font-weight:600;"></span></h3>
+                                    <button class="btn btn-secondary btn-sm" onclick="exportCSVReport('expenses')">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                </div>
+                                <div class="table-container">
+                                    <table class="app-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Category</th>
+                                                <th>Notes / Description</th>
+                                                <th>Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="report-expenses-tbody">
                                             <!-- Dynamic report lines -->
                                         </tbody>
                                     </table>

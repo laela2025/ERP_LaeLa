@@ -44,74 +44,6 @@ function normalizeExpensesList(expenses) {
     return (expenses || []).map(normalizeExpenseRecord);
 }
 
-// Seed Mock Data if LocalStorage is empty
-const SEED_DATA = {
-    products: [
-        { id: "p1", name: "Cute Bear Cotton Jumpsuit", sku: "LL-INF-101", category: "Infant Wear", size: "3-6M", costPrice: 250, sellingPrice: 699, stock: 15 },
-        { id: "p2", name: "Dinosaur Printed Cotton Tee", sku: "LL-BOY-201", category: "Toddler Boys", size: "2-3Y", costPrice: 180, sellingPrice: 499, stock: 8 },
-        { id: "p3", name: "Floral Pastel Summer Dress", sku: "LL-GIRL-301", category: "Toddler Girls", size: "4-5Y", costPrice: 320, sellingPrice: 899, stock: 12 },
-        { id: "p4", name: "Soft Knit Crochet Booties", sku: "LL-ACC-401", category: "Kids Accessories", size: "One Size", costPrice: 80, sellingPrice: 299, stock: 25 },
-        { id: "p5", name: "Ruffled Linen Pastel Romper", sku: "LL-GIRL-302", category: "Toddler Girls", size: "12-18M", costPrice: 280, sellingPrice: 799, stock: 3 }
-    ],
-    purchases: [
-        { id: "pur1", dateTime: "2026-06-01T10:00:00.000Z", productId: "p1", productName: "Cute Bear Cotton Jumpsuit", sku: "LL-INF-101", size: "3-6M", qty: 20, costPrice: 250, supplier: "Primary Kids Factory Ltd", totalOutlay: 5000 },
-        { id: "pur2", dateTime: "2026-06-01T11:30:00.000Z", productId: "p2", productName: "Dinosaur Printed Cotton Tee", sku: "LL-BOY-201", size: "2-3Y", qty: 15, costPrice: 180, supplier: "Nursery Textiles Corp", totalOutlay: 2700 },
-        { id: "pur3", dateTime: "2026-06-02T14:15:00.000Z", productId: "p3", productName: "Floral Pastel Summer Dress", sku: "LL-GIRL-301", size: "4-5Y", qty: 15, costPrice: 320, supplier: "Nursery Textiles Corp", totalOutlay: 4800 },
-        { id: "pur4", dateTime: "2026-06-03T09:00:00.000Z", productId: "p4", productName: "Soft Knit Crochet Booties", sku: "LL-ACC-401", size: "One Size", qty: 30, costPrice: 80, supplier: "Handcrafted Kids Ltd", totalOutlay: 2400 },
-        { id: "pur5", dateTime: "2026-06-04T16:00:00.000Z", productId: "p5", productName: "Ruffled Linen Pastel Romper", sku: "LL-GIRL-302", size: "12-18M", qty: 10, costPrice: 280, supplier: "Primary Kids Factory Ltd", totalOutlay: 2800 }
-    ],
-    sales: [
-        {
-            id: "s1",
-            invoiceNumber: "LAELA-1001",
-            dateTime: "2026-06-10T12:30:00.000Z",
-            customerName: "Ananya Sharma",
-            items: [
-                { productId: "p1", name: "Cute Bear Cotton Jumpsuit", sku: "LL-INF-101", size: "3-6M", quantity: 2, costPrice: 250, sellingPrice: 699 },
-                { productId: "p2", name: "Dinosaur Printed Cotton Tee", sku: "LL-BOY-201", size: "2-3Y", quantity: 3, costPrice: 180, sellingPrice: 499 }
-            ],
-            subtotal: 2895,
-            discountType: "percent",
-            discountVal: 10,
-            discountDeducted: 289.5,
-            tax: 312.66,
-            grandTotal: 2918.16,
-            cogs: 1040,
-            profit: 1565.5
-        },
-        {
-            id: "s2",
-            invoiceNumber: "LAELA-1002",
-            dateTime: "2026-06-11T15:45:00.000Z",
-            customerName: "Rahul Verma",
-            items: [
-                { productId: "p3", name: "Floral Pastel Summer Dress", sku: "LL-GIRL-301", size: "4-5Y", quantity: 1, costPrice: 320, sellingPrice: 899 },
-                { productId: "p4", name: "Soft Knit Crochet Booties", sku: "LL-ACC-401", size: "One Size", quantity: 2, costPrice: 80, sellingPrice: 299 }
-            ],
-            subtotal: 1497,
-            discountType: "flat",
-            discountVal: 150,
-            discountDeducted: 150,
-            tax: 161.64,
-            grandTotal: 1508.64,
-            cogs: 480,
-            profit: 867
-        }
-    ],
-    expenses: [
-        { id: "e1", date: "2026-06-02", amount: 1500, category: "Rent", description: "June Rent for Shop Space", paymentMode: "Bank Transfer", remarks: "Paid to landlord" },
-        { id: "e2", date: "2026-06-05", amount: 800, category: "Marketing", description: "Instagram Kids Wear Ad Boost", paymentMode: "UPI", remarks: "" },
-        { id: "e3", date: "2026-06-08", amount: 350, category: "Packaging", description: "Delivery cardboard box purchase (50 units)", paymentMode: "Cash", remarks: "Local supplier" }
-    ],
-    categories: ["Toddler Boys", "Toddler Girls", "Infant Wear", "Kids Accessories"],
-    expenseCategories: [...DEFAULT_EXPENSE_CATEGORIES],
-    users: [
-        { id: "u1", name: "Store Admin", username: "admin", password: "admin", role: "Admin", status: "Active" },
-        { id: "u2", name: "Store Manager", username: "manager", password: "manager", role: "Manager", status: "Active" },
-        { id: "u3", name: "Cashier Operator", username: "cashier", password: "cashier", role: "Cashier", status: "Active" }
-    ]
-};
-
 // Browsers cannot connect to PostgreSQL — only to the Node API (see api-config.js).
 const API_BASE = (() => {
     if (typeof window.LAELA_API_BASE === "string" && window.LAELA_API_BASE.trim()) {
@@ -145,10 +77,6 @@ function emptyState() {
         expenseCategories: [],
         users: []
     };
-}
-
-function isProductionHost() {
-    return window.location.hostname === "erp.laela.online";
 }
 
 function requirePostgresConnection(actionLabel) {
@@ -194,43 +122,18 @@ function normalizeStateShape(nextState) {
     return nextState;
 }
 
-function loadStateFromLocalStorage() {
-    const raw = localStorage.getItem("laela_erp_state");
-    if (raw) {
-        try {
-            state = normalizeStateShape(JSON.parse(raw));
-            return;
-        } catch (e) {
-            console.error("Failed to parse local storage state, loading seed data.", e);
-        }
-    }
-    state = { ...SEED_DATA };
+function applyLoadedState(nextState) {
+    state = normalizeStateShape(nextState);
+    enrichPurchasesWithMrp();
+    state.expenses = normalizeExpensesList(state.expenses);
+    ensureExpenseCategoriesComplete();
 }
 
-
 async function loadState() {
-    const localRaw = localStorage.getItem("laela_erp_state");
-    let localState = null;
-    if (localRaw) {
-        try {
-            localState = normalizeStateShape(JSON.parse(localRaw));
-        } catch (e) {
-            console.warn("Could not parse existing local storage state.", e);
-        }
-    }
-
     const apiHealthy = await checkApiHealth();
     if (!apiHealthy) {
         dbOnline = false;
-        if (isProductionHost()) {
-            state = localState || emptyState();
-            state = normalizeStateShape(state);
-        } else {
-            loadStateFromLocalStorage();
-        }
-        enrichPurchasesWithMrp();
-        state.expenses = normalizeExpensesList(state.expenses);
-        ensureExpenseCategoriesComplete();
+        applyLoadedState(emptyState());
         updateDatabaseStatus();
         scheduleDatabaseReconnect();
         return;
@@ -239,27 +142,8 @@ async function loadState() {
     try {
         const response = await fetch(`${API_BASE}/state`);
         if (response.ok) {
-            const apiState = normalizeStateShape(await response.json());
             dbOnline = true;
-
-            const shouldMigrateLocalData = !isProductionHost()
-                && localState
-                && !sessionStorage.getItem("laela_erp_db_migrated")
-                && (localState.products.length > 0 || localState.sales.length > 0);
-
-            if (shouldMigrateLocalData) {
-                state = localState;
-                state.users = apiState.users;
-                await persistStateImmediate(false);
-                sessionStorage.setItem("laela_erp_db_migrated", "true");
-            } else {
-                state = apiState;
-            }
-
-            enrichPurchasesWithMrp();
-            state.expenses = normalizeExpensesList(state.expenses);
-            ensureExpenseCategoriesComplete();
-            saveStateToLocalStorage();
+            applyLoadedState(await response.json());
             updateDatabaseStatus();
             return;
         }
@@ -268,15 +152,7 @@ async function loadState() {
     }
 
     dbOnline = false;
-    if (isProductionHost()) {
-        state = localState || emptyState();
-        state = normalizeStateShape(state);
-    } else {
-        loadStateFromLocalStorage();
-    }
-    enrichPurchasesWithMrp();
-    state.expenses = normalizeExpensesList(state.expenses);
-    ensureExpenseCategoriesComplete();
+    applyLoadedState(emptyState());
     updateDatabaseStatus();
     scheduleDatabaseReconnect();
 }
@@ -305,10 +181,6 @@ function scheduleDatabaseReconnect() {
             // keep trying
         }
     }, 5000);
-}
-
-function saveStateToLocalStorage() {
-    localStorage.setItem("laela_erp_state", JSON.stringify(state));
 }
 
 async function persistStateImmediate(updateUsers = false) {
@@ -348,7 +220,6 @@ async function persistStateImmediate(updateUsers = false) {
                 }
                 throw new Error(`Save failed (${response.status}): ${detail || "unknown error"}`);
             }
-            saveStateToLocalStorage();
             return true;
         } catch (e) {
             console.error("Failed to save to database.", e);
@@ -412,19 +283,18 @@ function updateDatabaseStatus() {
         if (bannerText) {
             const isProduction = window.location.hostname === "erp.laela.online";
             bannerText.innerHTML = isProduction
-                ? `<strong>Database not connected.</strong> Cannot reach <code>${API_BASE}</code>. `
+                ? `<strong>PostgreSQL not connected.</strong> Cannot reach <code>${API_BASE}</code>. `
                     + `${lastApiError ? `Error: ${lastApiError}. ` : ""}`
-                    + `Data is <em>not</em> saved to PostgreSQL. `
+                    + `No data is loaded or saved until the API is available. `
                     + `Hard-refresh (Ctrl+F5), then test in browser console: `
                     + `<code>fetch('${API_BASE}/health').then(r=&gt;r.json()).then(console.log)</code>`
-                : `<strong>Database not connected.</strong> Data entered now is <em>not</em> saved to the store database. `
-                    + `On this PC run <code>npm start</code> in PowerShell, then open `
+                : `<strong>PostgreSQL not connected.</strong> Configure PostgreSQL in <code>.env</code>, run <code>npm start</code>, then open `
                     + `<a href="http://localhost:3001" style="color: inherit; font-weight: 700;">http://localhost:3001</a>.`;
         }
     }
     const loginStatus = document.getElementById("login-db-status");
     if (loginStatus) {
-        loginStatus.innerHTML = '<span style="color: var(--danger);">API offline — configure laela-api-base or run npm start</span>';
+        loginStatus.innerHTML = '<span style="color: var(--danger);">PostgreSQL API offline — configure .env and run npm start</span>';
     }
     scheduleDatabaseReconnect();
 }
@@ -2664,22 +2534,10 @@ function restoreStateFromBackup(parsed, currentUsers) {
 }
 
 function exportBackup() {
-    // If the API (SQLite) is online, download a full backup archive that includes:
-    // - JSON state (business data only; users/roles are not included)
-    // - SQLite DB file (full database snapshot)
-    if (dbOnline) {
-        window.location.href = `${API_BASE}/backup/full`;
+    if (!requirePostgresConnection("download backup")) {
         return;
     }
-
-    // Offline fallback: JSON-only backup from browser storage (no users).
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportStateForBackup(state)));
-    const downloadAnchor = document.createElement("a");
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `laela_erp_backup_${new Date().toISOString().substring(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    window.location.href = `${API_BASE}/backup/full`;
 }
 
 function triggerImport() {
@@ -2848,7 +2706,6 @@ async function resetERPDatabase() {
         const response = await fetch(`${API_BASE}/reset`, { method: "POST" });
         if (response.ok) {
             state = normalizeStateShape(await response.json());
-            saveStateToLocalStorage();
             dbOnline = true;
             alert("Business data cleared in PostgreSQL. User accounts and roles were kept. The page will now reload.");
             window.location.reload();

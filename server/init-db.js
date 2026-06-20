@@ -1,5 +1,5 @@
-import { initDatabase, closeDatabase, dbPath, dbEngine } from "./database.js";
+import { initDatabase, closeDatabase, dbPath } from "./database.js";
 
 await initDatabase();
 await closeDatabase();
-console.log(`Database ready (${dbEngine}): ${dbPath}`);
+console.log(`Database ready (PostgreSQL): ${dbPath}`);

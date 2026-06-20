@@ -12,12 +12,7 @@
     "start:api": "node server/index.js",
     "install:api-server": "powershell -ExecutionPolicy Bypass -File scripts/install-api-server.ps1",
     "preview": "vite preview",
-    "setup:git-db": "powershell -ExecutionPolicy Bypass -File scripts/setup-git-db.ps1",
     "db:init": "node server/init-db.js",
-    "db:use-in-git": "powershell -ExecutionPolicy Bypass -File scripts/use-repo-db.ps1",
-    "db:protect": "powershell -ExecutionPolicy Bypass -File scripts/db-protect.ps1",
-    "db:sync": "powershell -ExecutionPolicy Bypass -File scripts/db-sync.ps1",
-    "db:status": "powershell -ExecutionPolicy Bypass -File scripts/db-status.ps1",
     "hooks:install": "powershell -ExecutionPolicy Bypass -File scripts/install-hooks.ps1",
     "git:push": "powershell -ExecutionPolicy Bypass -File scripts/git-push.ps1"
   },

@@ -121,12 +121,7 @@ app.get("/api/backup/full", async (_req, res) => {
         const state = await loadState();
         const { users, ...businessData } = state;
         archive.append(JSON.stringify(businessData, null, 2), { name: "laela_erp_state.json" });
-
-        if (dbEngine === "sqlite") {
-            archive.file(tempDbBackupPath, { name: "laela_erp.db" });
-        } else {
-            archive.file(tempDbBackupPath, { name: "laela_erp_postgres.json" });
-        }
+        archive.file(tempDbBackupPath, { name: "laela_erp_postgres.json" });
 
         await archive.finalize();
 
@@ -186,6 +181,6 @@ app.listen(PORT, HOST, () => {
         console.log(`LaeLa ERP running at http://localhost:${PORT}`);
     }
     console.log(`API: http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}/api`);
-    console.log(`Database engine: ${dbEngine}`);
+    console.log(`Database engine: PostgreSQL`);
     console.log(`Database: ${dbPath}`);
 });

@@ -3,7 +3,9 @@ dist/
 .env
 .DS_Store
 
-# SQLite runtime files (only data/laela_erp.db is tracked)
+# Legacy SQLite files (no longer used)
+data/laela_erp.db
+*.db
 *.db-wal
 *.db-shm
 data/backups/

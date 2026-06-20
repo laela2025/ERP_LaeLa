@@ -17,8 +17,8 @@ if [ ! -f server/drivers/postgres.js ]; then
   exit 1
 fi
 
-if ! head -3 server/database.js | grep -q "let driver"; then
-  echo "ERROR: server/database.js is outdated (still uses SQLite directly)."
+if ! grep -q "postgres" server/database.js; then
+  echo "ERROR: server/database.js must use PostgreSQL."
   echo "Run: git pull origin main"
   exit 1
 fi

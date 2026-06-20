@@ -1795,6 +1795,14 @@ function enrichPurchasesWithMrp() {
     }
 }
 
+function sortPurchasesByDate(purchases, newestFirst = true) {
+    return purchases.slice().sort((a, b) => {
+        const timeA = new Date(a.dateTime).getTime();
+        const timeB = new Date(b.dateTime).getTime();
+        return newestFirst ? timeB - timeA : timeA - timeB;
+    });
+}
+
 function renderReportPurchasesTable(filteredPurchases) {
     const tbody = document.getElementById("report-purchases-tbody");
     tbody.innerHTML = "";
@@ -1804,7 +1812,7 @@ function renderReportPurchasesTable(filteredPurchases) {
         return;
     }
 
-    filteredPurchases.forEach(p => {
+    sortPurchasesByDate(filteredPurchases).forEach(p => {
         const timeStr = new Date(p.dateTime).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
         const batch = getStockBatchForPurchase(p);
         const mrp = batch ? batch.sellingPrice : getPurchaseMrp(p);
@@ -2011,7 +2019,7 @@ function exportCSVReport(type) {
         });
 
         csvContent += "Date,Bill Number,SKU,Product Name,Size,Quantity Added,Unit Cost Price,Unit MRP Price,Total Expenditure,Supplier\n";
-        filteredPurchases.forEach(p => {
+        sortPurchasesByDate(filteredPurchases).forEach(p => {
             const dateStr = new Date(p.dateTime).toLocaleDateString('en-IN');
             const bill = (p.billNumber || "").replace(/"/g, '""');
             const batch = getStockBatchForPurchase(p);

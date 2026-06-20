@@ -415,13 +415,6 @@
                                     <label for="expense-payment-mode">Payment Mode</label>
                                     <select class="form-control" id="expense-payment-mode" required>
                                         <option value="">Select Payment Mode</option>
-                                        <option value="Cash">Cash</option>
-                                        <option value="UPI">UPI</option>
-                                        <option value="Debit Card">Debit Card</option>
-                                        <option value="Credit Card">Credit Card</option>
-                                        <option value="Bank Transfer">Bank Transfer</option>
-                                        <option value="Cheque">Cheque</option>
-                                        <option value="Other">Other</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -436,7 +429,21 @@
 
                         <!-- Right Panel: Expenses History List -->
                         <div class="card">
-                            <h3 style="margin-bottom: 20px;">Expense Log History</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom: 20px; flex-wrap: wrap;">
+                                <h3 style="margin-bottom: 0;">Expense Log History</h3>
+                                <div style="display:flex; gap:8px; flex-wrap: wrap;">
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="exportExpensesTrackerCSV()">
+                                        <i class="fa-solid fa-file-csv"></i> Export CSV
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="triggerExpensesCSVImport()">
+                                        <i class="fa-solid fa-file-import"></i> Import CSV
+                                    </button>
+                                </div>
+                            </div>
+                            <input type="file" id="expense-csv-import-input" accept=".csv,text/csv" style="display:none;" onchange="importExpensesCSV(event)">
+                            <p style="margin: 0 0 16px; font-size: 0.85rem; color: var(--text-muted);">
+                                CSV columns: Date, Expense Type, Description, Amount, Payment Mode, Remarks. New expense types and payment modes are added automatically on import.
+                            </p>
                             <div class="table-container">
                                 <table class="app-table">
                                     <thead>

@@ -19,6 +19,16 @@ const DEFAULT_EXPENSE_CATEGORIES = [
     "Other"
 ];
 
+const DEFAULT_PAYMENT_MODES = [
+    "Cash",
+    "UPI",
+    "Debit Card",
+    "Credit Card",
+    "Bank Transfer",
+    "Cheque",
+    "Other"
+];
+
 function normalizeExpenseRecord(expense) {
     const description = (expense.description || expense.notes || "").trim();
     return {
@@ -478,7 +488,7 @@ function switchTab(tabId) {
     } else if (tabId === "expenses") {
         renderExpenses();
         populateExpenseCategoryDropdown();
-        // set default date to today
+        populatePaymentModeDropdown();
         document.getElementById("expense-date").value = new Date().toISOString().substring(0, 10);
     } else if (tabId === "tags") {
         renderTagSelectorTable();
@@ -1413,6 +1423,325 @@ function populateExpenseCategoryDropdown() {
     }
 }
 
+function getPaymentModesList() {
+    const modes = new Map();
+    DEFAULT_PAYMENT_MODES.forEach(mode => modes.set(mode.toLowerCase(), mode));
+    for (const expense of state.expenses || []) {
+        const mode = (expense.paymentMode || "").trim();
+        if (mode) {
+            modes.set(mode.toLowerCase(), mode);
+        }
+    }
+    return Array.from(modes.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function populatePaymentModeDropdown() {
+    const select = document.getElementById("expense-payment-mode");
+    if (!select) {
+        return;
+    }
+    const selected = select.value;
+    select.innerHTML = '<option value="">Select Payment Mode</option>';
+    getPaymentModesList().forEach(mode => {
+        select.innerHTML += `<option value="${mode}">${mode}</option>`;
+    });
+    if (selected && getPaymentModesList().some(mode => mode === selected)) {
+        select.value = selected;
+    }
+}
+
+function ensureExpenseTypeExists(typeName) {
+    const trimmed = (typeName || "").trim();
+    if (!trimmed) {
+        return false;
+    }
+    const exists = state.expenseCategories.some(cat => cat.toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+        state.expenseCategories.push(trimmed);
+    }
+    return true;
+}
+
+function escapeCSVField(value) {
+    return String(value ?? "").replace(/"/g, '""');
+}
+
+function buildExpensesCSVContent(expenses) {
+    let content = "Date,Expense Type,Description,Amount,Payment Mode,Remarks\n";
+    sortExpensesByDate(expenses).forEach(e => {
+        const dateStr = new Date(e.date + "T12:00:00").toLocaleDateString('en-IN');
+        const description = escapeCSVField(getExpenseDescription(e));
+        const remarks = escapeCSVField(e.remarks);
+        const paymentMode = escapeCSVField(e.paymentMode);
+        content += `${dateStr},${escapeCSVField(e.category)},"${description}",${e.amount},"${paymentMode}","${remarks}"\n`;
+    });
+    return content;
+}
+
+function downloadCSVFile(csvBody, filename) {
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(csvBody);
+    const link = document.createElement("a");
+    link.setAttribute("href", csvContent);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function exportExpensesTrackerCSV() {
+    const dateTag = new Date().toISOString().substring(0, 10);
+    downloadCSVFile(buildExpensesCSVContent(state.expenses), `laela_expenses_${dateTag}.csv`);
+}
+
+function triggerExpensesCSVImport() {
+    document.getElementById("expense-csv-import-input").click();
+}
+
+function parseCSVText(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+
+        if (inQuotes) {
+            if (char === '"') {
+                if (text[i + 1] === '"') {
+                    field += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                field += char;
+            }
+            continue;
+        }
+
+        if (char === '"') {
+            inQuotes = true;
+        } else if (char === ",") {
+            row.push(field.trim());
+            field = "";
+        } else if (char === "\n" || (char === "\r" && text[i + 1] === "\n")) {
+            if (char === "\r") {
+                i++;
+            }
+            row.push(field.trim());
+            if (row.some(cell => cell !== "")) {
+                rows.push(row);
+            }
+            row = [];
+            field = "";
+        } else {
+            field += char;
+        }
+    }
+
+    row.push(field.trim());
+    if (row.some(cell => cell !== "")) {
+        rows.push(row);
+    }
+
+    return rows;
+}
+
+function normalizeImportedExpenseDate(value) {
+    const raw = (value || "").trim();
+    if (!raw) {
+        return null;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return raw;
+    }
+
+    const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+        const day = dmy[1].padStart(2, "0");
+        const month = dmy[2].padStart(2, "0");
+        return `${dmy[3]}-${month}-${day}`;
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().substring(0, 10);
+    }
+
+    return null;
+}
+
+function mapExpenseCSVHeaderIndex(headers) {
+    const normalized = headers.map(h => h.trim().toLowerCase());
+    const indexMap = {};
+    const aliases = {
+        date: ["date"],
+        expenseType: ["expense type", "expense_type", "category", "type"],
+        description: ["description", "details", "notes"],
+        amount: ["amount", "expense amount"],
+        paymentMode: ["payment mode", "payment_mode", "mode"],
+        remarks: ["remarks", "remark", "comments"]
+    };
+
+    for (const [key, names] of Object.entries(aliases)) {
+        const idx = normalized.findIndex(h => names.includes(h));
+        if (idx === -1) {
+            return null;
+        }
+        indexMap[key] = idx;
+    }
+
+    return indexMap;
+}
+
+function parseImportedExpenseRow(cells, indexMap, rowNumber) {
+    const date = normalizeImportedExpenseDate(cells[indexMap.date]);
+    const expenseType = (cells[indexMap.expenseType] || "").trim();
+    const description = (cells[indexMap.description] || "").trim();
+    const amount = parseFloat(String(cells[indexMap.amount] || "").replace(/,/g, ""));
+    const paymentMode = (cells[indexMap.paymentMode] || "").trim();
+    const remarks = (cells[indexMap.remarks] || "").trim();
+
+    if (!date) {
+        return { error: `Row ${rowNumber}: invalid or missing date.` };
+    }
+    if (!expenseType) {
+        return { error: `Row ${rowNumber}: expense type is required.` };
+    }
+    if (!description) {
+        return { error: `Row ${rowNumber}: description is required.` };
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return { error: `Row ${rowNumber}: amount must be greater than 0.` };
+    }
+    if (!paymentMode) {
+        return { error: `Row ${rowNumber}: payment mode is required.` };
+    }
+
+    return normalizeExpenseRecord({
+        date,
+        category: expenseType,
+        description,
+        amount,
+        paymentMode,
+        remarks
+    });
+}
+
+async function importExpensesCSV(event) {
+    const input = event.target;
+    if (!input.files || input.files.length === 0) {
+        return;
+    }
+
+    if (!requirePostgresConnection("import expenses CSV")) {
+        input.value = "";
+        return;
+    }
+
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = async function() {
+        try {
+            const rows = parseCSVText(String(reader.result || "").replace(/^\uFEFF/, ""));
+            if (rows.length < 2) {
+                alert("CSV file is empty or has no data rows.");
+                return;
+            }
+
+            const indexMap = mapExpenseCSVHeaderIndex(rows[0]);
+            if (!indexMap) {
+                alert("Invalid CSV headers. Expected: Date, Expense Type, Description, Amount, Payment Mode, Remarks");
+                return;
+            }
+
+            const existingTypes = new Set(state.expenseCategories.map(cat => cat.toLowerCase()));
+            const existingModes = new Set(getPaymentModesList().map(mode => mode.toLowerCase()));
+            const imported = [];
+            const errors = [];
+            let newTypes = 0;
+            let newModes = 0;
+            const addedTypes = new Set();
+            const addedModes = new Set();
+
+            for (let i = 1; i < rows.length; i++) {
+                const parsed = parseImportedExpenseRow(rows[i], indexMap, i + 1);
+                if (parsed.error) {
+                    errors.push(parsed.error);
+                    continue;
+                }
+
+                if (!existingTypes.has(parsed.category.toLowerCase())) {
+                    ensureExpenseTypeExists(parsed.category);
+                    existingTypes.add(parsed.category.toLowerCase());
+                    if (!addedTypes.has(parsed.category.toLowerCase())) {
+                        addedTypes.add(parsed.category.toLowerCase());
+                        newTypes++;
+                    }
+                }
+
+                if (!existingModes.has(parsed.paymentMode.toLowerCase())) {
+                    existingModes.add(parsed.paymentMode.toLowerCase());
+                    if (!addedModes.has(parsed.paymentMode.toLowerCase())) {
+                        addedModes.add(parsed.paymentMode.toLowerCase());
+                        newModes++;
+                    }
+                }
+
+                parsed.id = `exp_imp_${Date.now()}_${i}`;
+                imported.push(parsed);
+            }
+
+            if (imported.length === 0) {
+                alert(errors.length
+                    ? `No expenses were imported.\n\n${errors.slice(0, 5).join("\n")}`
+                    : "No valid expense rows found in the CSV file.");
+                return;
+            }
+
+            if (!confirm(`Import ${imported.length} expense(s)?${newTypes ? `\n• ${newTypes} new expense type(s) will be added.` : ""}${newModes ? `\n• ${newModes} new payment mode(s) will be added.` : ""}`)) {
+                return;
+            }
+
+            state.expenses.push(...imported);
+            ensureExpenseCategoriesComplete();
+            const saved = await saveStateOrRevert(false);
+            if (!saved) {
+                alert("Imported expenses were not saved to PostgreSQL. Check API connection and try again.");
+                await loadState();
+                return;
+            }
+
+            populateExpenseCategoryDropdown();
+            populatePaymentModeDropdown();
+            renderExpenses();
+
+            let message = `${imported.length} expense(s) imported successfully.`;
+            if (newTypes) {
+                message += `\n${newTypes} new expense type(s) added.`;
+            }
+            if (newModes) {
+                message += `\n${newModes} new payment mode(s) added.`;
+            }
+            if (errors.length) {
+                message += `\n\n${errors.length} row(s) skipped:\n${errors.slice(0, 5).join("\n")}`;
+                if (errors.length > 5) {
+                    message += `\n...and ${errors.length - 5} more.`;
+                }
+            }
+            alert(message);
+        } catch (e) {
+            alert("Failed to read CSV file. Make sure it is a valid comma-separated file.");
+            console.error(e);
+        } finally {
+            input.value = "";
+        }
+    };
+    reader.readAsText(file);
+}
+
 function openExpenseCategoriesModal() {
     renderExpenseCategoriesList();
     document.getElementById("expense-category-form").reset();
@@ -1561,6 +1890,7 @@ async function saveExpense(event) {
     document.getElementById("expense-date").value = new Date().toISOString().substring(0, 10);
     
     renderExpenses();
+    populatePaymentModeDropdown();
     alert("Expense logged successfully!");
 }
 
@@ -2232,14 +2562,7 @@ function exportCSVReport(type) {
             return eDate >= range.start && eDate <= range.end;
         });
 
-        csvContent += "Date,Expense Type,Description,Amount,Payment Mode,Remarks\n";
-        sortExpensesByDate(filteredExpenses).forEach(e => {
-            const dateStr = new Date(e.date + "T12:00:00").toLocaleDateString('en-IN');
-            const description = (getExpenseDescription(e) || "").replace(/"/g, '""');
-            const remarks = (e.remarks || "").replace(/"/g, '""');
-            const paymentMode = (e.paymentMode || "").replace(/"/g, '""');
-            csvContent += `${dateStr},${e.category},"${description}",${e.amount},"${paymentMode}","${remarks}"\n`;
-        });
+        csvContent += buildExpensesCSVContent(filteredExpenses);
     }
     else if (type === 'margins') {
         const filteredSales = state.sales.filter(s => {

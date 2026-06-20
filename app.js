@@ -1771,6 +1771,18 @@ function renderReportSalesTable(filteredSales) {
     });
 }
 
+function getPurchaseMrp(purchase) {
+    const batch = state.products.find(prod => prod.id === purchase.productId);
+    if (batch && Number.isFinite(batch.sellingPrice)) {
+        return batch.sellingPrice;
+    }
+    const sameSku = state.products.find(prod => prod.sku === purchase.sku);
+    if (sameSku && Number.isFinite(sameSku.sellingPrice)) {
+        return sameSku.sellingPrice;
+    }
+    return null;
+}
+
 function renderReportPurchasesTable(filteredPurchases) {
     const tbody = document.getElementById("report-purchases-tbody");
     tbody.innerHTML = "";
@@ -1782,6 +1794,8 @@ function renderReportPurchasesTable(filteredPurchases) {
 
     filteredPurchases.forEach(p => {
         const timeStr = new Date(p.dateTime).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
+        const mrp = getPurchaseMrp(p);
+        const mrpCell = mrp == null ? "—" : fmtCurr(mrp);
         tbody.innerHTML += `
             <tr>
                 <td>${timeStr}</td>
@@ -1791,7 +1805,7 @@ function renderReportPurchasesTable(filteredPurchases) {
                 <td><span class="badge badge-info">${p.size}</span></td>
                 <td style="font-weight:600;">+${p.qty} units</td>
                 <td>${fmtCurr(p.costPrice)}</td>
-                <td>${fmtCurr(p.costPrice * 1.5 /* Approximate MRP */)}</td>
+                <td>${mrpCell}</td>
                 <td><span style="font-size:0.8rem; color:var(--text-secondary);">${p.supplier}</span></td>
                 <td style="font-weight:700; color:var(--accent);">${fmtCurr(p.totalOutlay)}</td>
             </tr>
@@ -1939,11 +1953,12 @@ function exportCSVReport(type) {
             return pDate >= range.start && pDate <= range.end;
         });
 
-        csvContent += "Date,Bill Number,SKU,Product Name,Size,Quantity Added,Unit Cost Price,Total Expenditure,Supplier\n";
+        csvContent += "Date,Bill Number,SKU,Product Name,Size,Quantity Added,Unit Cost Price,Unit MRP Price,Total Expenditure,Supplier\n";
         filteredPurchases.forEach(p => {
             const dateStr = new Date(p.dateTime).toLocaleDateString('en-IN');
             const bill = (p.billNumber || "").replace(/"/g, '""');
-            csvContent += `${dateStr},"${bill}",${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${p.totalOutlay},"${p.supplier}"\n`;
+            const mrp = getPurchaseMrp(p);
+            csvContent += `${dateStr},"${bill}",${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${mrp ?? ""},${p.totalOutlay},"${p.supplier}"\n`;
         });
     } 
     else if (type === 'margins') {

@@ -35,12 +35,13 @@ function initSchema() {
         CREATE TABLE IF NOT EXISTS products (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            sku TEXT NOT NULL UNIQUE,
+            sku TEXT NOT NULL,
             category TEXT NOT NULL,
             size TEXT NOT NULL,
             cost_price REAL NOT NULL,
             selling_price REAL NOT NULL,
-            stock INTEGER NOT NULL
+            stock INTEGER NOT NULL,
+            UNIQUE (sku, cost_price)
         );
 
         CREATE TABLE IF NOT EXISTS categories (

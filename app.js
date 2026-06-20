@@ -292,7 +292,7 @@ async function persistStateImmediate(updateUsers = false) {
                 let detail = "";
                 try {
                     const errJson = await response.json();
-                    detail = errJson.error || JSON.stringify(errJson);
+                    detail = errJson.detail || errJson.error || JSON.stringify(errJson);
                 } catch {
                     detail = await response.text();
                 }

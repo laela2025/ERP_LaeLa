@@ -36,12 +36,13 @@ async function initSchema() {
         CREATE TABLE IF NOT EXISTS products (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            sku TEXT NOT NULL UNIQUE,
+            sku TEXT NOT NULL,
             category TEXT NOT NULL,
             size TEXT NOT NULL,
             cost_price DOUBLE PRECISION NOT NULL,
             selling_price DOUBLE PRECISION NOT NULL,
-            stock INTEGER NOT NULL
+            stock INTEGER NOT NULL,
+            UNIQUE (sku, cost_price)
         );
 
         CREATE TABLE IF NOT EXISTS categories (
@@ -116,6 +117,26 @@ async function ensureSchemaCompatibility() {
     `);
     if (rows.length === 0) {
         await pool.query("ALTER TABLE purchases ADD COLUMN bill_number TEXT");
+    }
+
+    // Older DBs had UNIQUE(sku) — blocks same SKU at different purchase costs (stock batches)
+    await pool.query("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_sku_key");
+
+    const { rows: batchUnique } = await pool.query(`
+        SELECT 1
+        FROM pg_constraint con
+        JOIN pg_class rel ON rel.oid = con.conrelid
+        JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+        WHERE nsp.nspname = 'public'
+          AND rel.relname = 'products'
+          AND con.conname = 'products_sku_cost_price_key'
+    `);
+    if (batchUnique.length === 0) {
+        try {
+            await pool.query("ALTER TABLE products ADD CONSTRAINT products_sku_cost_price_key UNIQUE (sku, cost_price)");
+        } catch (error) {
+            console.warn("Could not add products_sku_cost_price_key:", error.message);
+        }
     }
 }
 

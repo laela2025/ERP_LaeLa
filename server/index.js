@@ -24,6 +24,7 @@ const defaultOrigins = [
     "http://localhost:3001",
     "http://localhost:5173",
     "https://erp.laela.online",
+    "https://www.erp.laela.online",
     "https://laela2025.github.io"
 ];
 const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins.join(","))
@@ -81,7 +82,10 @@ app.put("/api/state", async (req, res) => {
         res.json({ ok: true });
     } catch (error) {
         console.error("Failed to save state:", error);
-        res.status(500).json({ error: "Failed to save database state." });
+        res.status(500).json({
+            error: "Failed to save database state.",
+            detail: error.message
+        });
     }
 });
 

@@ -90,9 +90,49 @@ const API_BASE = (() => {
     return "/api";
 })();
 let dbOnline = false;
-let saveTimeout = null;
 let reconnectTimer = null;
+let saveChain = Promise.resolve();
 
+function costPriceMatches(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function emptyState() {
+    return {
+        products: [],
+        sales: [],
+        expenses: [],
+        purchases: [],
+        categories: [],
+        users: []
+    };
+}
+
+function isProductionHost() {
+    return window.location.hostname === "erp.laela.online";
+}
+
+function requirePostgresConnection(actionLabel) {
+    if (dbOnline) {
+        return true;
+    }
+    alert(`Cannot ${actionLabel}: API is not connected to PostgreSQL. Nothing was saved. Fix the API connection and try again.`);
+    updateDatabaseStatus();
+    return false;
+}
+
+async function checkApiHealth() {
+    try {
+        const response = await fetch(`${API_BASE}/health`);
+        if (!response.ok) {
+            return false;
+        }
+        const data = await response.json();
+        return data.ok === true;
+    } catch {
+        return false;
+    }
+}
 function normalizeStateShape(nextState) {
     // Only backfill when the field is missing (older saved states),
     // not when the array is intentionally empty.
@@ -130,13 +170,28 @@ async function loadState() {
         }
     }
 
+    const apiHealthy = await checkApiHealth();
+    if (!apiHealthy) {
+        dbOnline = false;
+        if (isProductionHost()) {
+            state = localState || emptyState();
+            state = normalizeStateShape(state);
+        } else {
+            loadStateFromLocalStorage();
+        }
+        updateDatabaseStatus();
+        scheduleDatabaseReconnect();
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/state`);
         if (response.ok) {
             const apiState = normalizeStateShape(await response.json());
             dbOnline = true;
 
-            const shouldMigrateLocalData = localState
+            const shouldMigrateLocalData = !isProductionHost()
+                && localState
                 && !sessionStorage.getItem("laela_erp_db_migrated")
                 && (localState.products.length > 0 || localState.sales.length > 0);
 
@@ -154,12 +209,18 @@ async function loadState() {
             return;
         }
     } catch (e) {
-        console.warn("Database API unavailable, using local storage.", e);
+        console.warn("Database API unavailable.", e);
     }
 
     dbOnline = false;
-    loadStateFromLocalStorage();
+    if (isProductionHost()) {
+        state = localState || emptyState();
+        state = normalizeStateShape(state);
+    } else {
+        loadStateFromLocalStorage();
+    }
     updateDatabaseStatus();
+    scheduleDatabaseReconnect();
 }
 
 function scheduleDatabaseReconnect() {
@@ -168,6 +229,10 @@ function scheduleDatabaseReconnect() {
     }
     reconnectTimer = setInterval(async () => {
         if (dbOnline) {
+            return;
+        }
+        const healthy = await checkApiHealth();
+        if (!healthy) {
             return;
         }
         try {
@@ -194,52 +259,66 @@ async function persistStateImmediate(updateUsers = false) {
         return false;
     }
 
-    try {
-        const payload = {
-            products: state.products,
-            sales: state.sales,
-            expenses: state.expenses,
-            purchases: state.purchases,
-            categories: state.categories
-        };
-        const headers = { "Content-Type": "application/json" };
-        if (updateUsers) {
-            payload.users = state.users;
-            headers["X-Update-Users"] = "true";
-        }
+    const runSave = async () => {
+        try {
+            const payload = {
+                products: state.products,
+                sales: state.sales,
+                expenses: state.expenses,
+                purchases: state.purchases,
+                categories: state.categories
+            };
+            const headers = { "Content-Type": "application/json" };
+            if (updateUsers) {
+                payload.users = state.users;
+                headers["X-Update-Users"] = "true";
+            }
 
-        const response = await fetch(`${API_BASE}/state`, {
-            method: "PUT",
-            headers,
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            throw new Error(`Save failed with status ${response.status}`);
+            const response = await fetch(`${API_BASE}/state`, {
+                method: "PUT",
+                headers,
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                throw new Error(`Save failed with status ${response.status}`);
+            }
+            saveStateToLocalStorage();
+            return true;
+        } catch (e) {
+            console.error("Failed to save to database.", e);
+            dbOnline = false;
+            updateDatabaseStatus();
+            scheduleDatabaseReconnect();
+            return false;
         }
-        saveStateToLocalStorage();
-        return true;
-    } catch (e) {
-        console.error("Failed to save to database.", e);
-        dbOnline = false;
-        updateDatabaseStatus();
-        scheduleDatabaseReconnect();
-        return false;
-    }
+    };
+
+    saveChain = saveChain.then(runSave, runSave);
+    return saveChain;
 }
 
-async function persistState(updateUsers = false) {
-    await persistStateImmediate(updateUsers);
-}
-
-function saveState(updateUsers = false) {
+async function saveStateOrRevert(updateUsers = false) {
     if (!dbOnline) {
         updateDatabaseStatus();
-        return;
+        return false;
     }
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-        persistState(updateUsers);
-    }, 250);
+
+    const snapshot = JSON.stringify(state);
+    const saved = await persistStateImmediate(updateUsers);
+    if (saved) {
+        return true;
+    }
+
+    try {
+        state = normalizeStateShape(JSON.parse(snapshot));
+    } catch {
+        await loadState();
+    }
+    return false;
+}
+
+async function saveState(updateUsers = false) {
+    return saveStateOrRevert(updateUsers);
 }
 
 function updateDatabaseStatus() {
@@ -248,23 +327,34 @@ function updateDatabaseStatus() {
 
     if (dbOnline) {
         if (statusEl) {
-            statusEl.innerHTML = '<span class="badge badge-success"><i class="fa-solid fa-database"></i> Connected to SQLite — data shared across all browsers on this PC</span>';
+            statusEl.innerHTML = '<span class="badge badge-success"><i class="fa-solid fa-database"></i> Connected to PostgreSQL via API — all data saves to the server</span>';
         }
         if (bannerEl) {
             bannerEl.style.display = "none";
         }
         const loginStatus = document.getElementById("login-db-status");
         if (loginStatus) {
-            loginStatus.innerHTML = '<span style="color: var(--success);">Database connected — data saves for all browsers</span>';
+            loginStatus.innerHTML = '<span style="color: var(--success);">PostgreSQL connected — all data saves to the server</span>';
         }
         return;
     }
 
     if (statusEl) {
-        statusEl.innerHTML = '<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> Cannot reach API — check api-config.js and that the server at 202.164.150.65 is running (npm start)</span>';
+        statusEl.innerHTML = `<span class="badge badge-danger"><i class="fa-solid fa-triangle-exclamation"></i> Cannot reach API at ${API_BASE}</span>`;
     }
     if (bannerEl) {
         bannerEl.style.display = "flex";
+        const bannerText = document.getElementById("db-offline-banner-text");
+        if (bannerText) {
+            const isProduction = window.location.hostname === "erp.laela.online";
+            bannerText.innerHTML = isProduction
+                ? `<strong>Database not connected.</strong> The app cannot reach <code>${API_BASE}</code>. `
+                    + `Data entered in Inward Stock is <em>not</em> saved to PostgreSQL. `
+                    + `On the server, enable HTTPS on port 27015 (or fix <code>api-config.js</code>), then hard-refresh this page.`
+                : `<strong>Database not connected.</strong> Data entered now is <em>not</em> saved to the store database. `
+                    + `On this PC run <code>npm start</code> in PowerShell, then open `
+                    + `<a href="http://localhost:3001" style="color: inherit; font-weight: 700;">http://localhost:3001</a>.`;
+        }
     }
     const loginStatus = document.getElementById("login-db-status");
     if (loginStatus) {
@@ -625,8 +715,11 @@ function closeProductModal() {
     document.getElementById("product-modal").classList.remove("active");
 }
 
-function saveProduct(event) {
+async function saveProduct(event) {
     event.preventDefault();
+    if (!requirePostgresConnection("save product")) {
+        return;
+    }
     const id = document.getElementById("prod-id-field").value;
     const name = document.getElementById("prod-name").value.trim();
     const sku = document.getElementById("prod-sku").value.trim().toUpperCase();
@@ -645,7 +738,7 @@ function saveProduct(event) {
         // Add new
         // check duplicate SKU
         // check duplicate SKU with same cost price
-        if (state.products.some(p => p.sku === sku && p.costPrice === costPrice)) {
+        if (state.products.some(p => p.sku === sku && costPriceMatches(p.costPrice, costPrice))) {
             alert("Error: A product with this SKU code and cost price already exists!");
             return;
         }
@@ -682,15 +775,26 @@ function saveProduct(event) {
         }
     }
 
-    saveState();
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Product was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
     closeProductModal();
     renderStockTable();
 }
 
-function deleteProduct(id) {
+async function deleteProduct(id) {
+    if (!requirePostgresConnection("delete product")) {
+        return;
+    }
     if (confirm("Are you sure you want to delete this product? This may affect historical invoices referencing it.")) {
         state.products = state.products.filter(p => p.id !== id);
-        saveState();
+        const saved = await saveStateOrRevert(false);
+        if (!saved) {
+            alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+            return;
+        }
         renderStockTable();
     }
 }
@@ -736,8 +840,11 @@ function closeStockInwardModal() {
     document.getElementById("stock-inward-modal").classList.remove("active");
 }
 
-function saveStockInward(event) {
+async function saveStockInward(event) {
     event.preventDefault();
+    if (!requirePostgresConnection("save inward stock")) {
+        return;
+    }
     const prodId = document.getElementById("inward-product-select").value;
     const qty = parseInt(document.getElementById("inward-qty").value) || 0;
     const costPrice = parseFloat(document.getElementById("inward-cost").value) || 0;
@@ -759,8 +866,8 @@ function saveStockInward(event) {
     const product = state.products.find(p => p.id === prodId);
     if (!product) return;
 
-    // Check if there is already a product entry with the SAME SKU and the SAME costPrice
-    let targetProduct = state.products.find(p => p.sku === product.sku && p.costPrice === costPrice);
+    // Match batch by SKU + cost price (tolerance for decimal input)
+    let targetProduct = state.products.find(p => p.sku === product.sku && costPriceMatches(p.costPrice, costPrice));
     let targetProdId = prodId;
 
     if (targetProduct) {
@@ -799,9 +906,13 @@ function saveStockInward(event) {
         totalOutlay: qty * costPrice
     });
 
-    saveState();
+    const saved = await saveStateOrRevert(false);
     closeStockInwardModal();
     renderStockTable();
+    if (!saved) {
+        alert("Inward stock was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
     alert(`Successfully added ${qty} units to ${targetProduct.name} at cost ${fmtCurr(costPrice)}. Total stock for this batch is ${targetProduct.stock}.`);
 }
 
@@ -996,7 +1107,10 @@ function updateCartTotals() {
     document.getElementById("cart-grand-total").innerText = fmtCurr(grandTotal);
 }
 
-function processPOSCheckout() {
+async function processPOSCheckout() {
+    if (!requirePostgresConnection("complete sale")) {
+        return;
+    }
     if (posCart.length === 0) {
         alert("Cart is empty!");
         return;
@@ -1063,7 +1177,11 @@ function processPOSCheckout() {
     };
 
     state.sales.push(newSale);
-    saveState();
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Sale was not saved to PostgreSQL. Stock was not updated on the server. Check API connection and try again.");
+        return;
+    }
 
     // 4. Render Invoice Printable Receipt
     renderInvoiceReceipt(newSale);
@@ -1194,8 +1312,11 @@ function renderExpenses() {
     });
 }
 
-function saveExpense(event) {
+async function saveExpense(event) {
     event.preventDefault();
+    if (!requirePostgresConnection("save expense")) {
+        return;
+    }
     const date = document.getElementById("expense-date").value;
     const amount = parseFloat(document.getElementById("expense-amount").value) || 0;
     const category = document.getElementById("expense-category").value;
@@ -1210,7 +1331,11 @@ function saveExpense(event) {
     };
 
     state.expenses.push(newExpense);
-    saveState();
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Expense was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
     
     // reset form
     document.getElementById("expense-form").reset();
@@ -1220,10 +1345,17 @@ function saveExpense(event) {
     alert("Expense logged successfully!");
 }
 
-function deleteExpense(id) {
+async function deleteExpense(id) {
+    if (!requirePostgresConnection("delete expense")) {
+        return;
+    }
     if (confirm("Delete this expense entry?")) {
         state.expenses = state.expenses.filter(e => e.id !== id);
-        saveState();
+        const saved = await saveStateOrRevert(false);
+        if (!saved) {
+            alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+            return;
+        }
         renderExpenses();
     }
 }
@@ -1846,15 +1978,23 @@ function importBackup(event) {
 
     const file = input.files[0];
     const reader = new FileReader();
-    reader.onload = function() {
+    reader.onload = async function() {
+        if (!requirePostgresConnection("import backup")) {
+            return;
+        }
         try {
             const parsed = JSON.parse(reader.result);
             if (parsed.products != null && parsed.sales != null && parsed.expenses != null && parsed.purchases != null) {
                 const currentUsers = state.users;
                 state = restoreStateFromBackup(parsed, currentUsers);
-                saveState();
-                alert("Business data restored from backup. User accounts and roles were kept unchanged.");
-                switchTab(activeTab); // reload active tab
+                const saved = await saveStateOrRevert(false);
+                if (!saved) {
+                    alert("Backup was not saved to PostgreSQL. Check API connection and try again.");
+                    await loadState();
+                    return;
+                }
+                alert("Business data restored from backup and saved to PostgreSQL.");
+                switchTab(activeTab);
             } else {
                 alert("Invalid backup file structure. Ensure it is a valid LaeLa ERP file.");
             }
@@ -1863,7 +2003,7 @@ function importBackup(event) {
         }
     };
     reader.readAsText(file);
-    input.value = ""; // clear inputs
+    input.value = "";
 }
 
 // ==========================================
@@ -1933,8 +2073,11 @@ function renderCategoriesList() {
     });
 }
 
-function saveCategory(event) {
+async function saveCategory(event) {
     event.preventDefault();
+    if (!requirePostgresConnection("save category")) {
+        return;
+    }
     const catName = document.getElementById("new-category-name").value.trim();
     if (catName === "") return;
 
@@ -1945,14 +2088,21 @@ function saveCategory(event) {
     }
 
     state.categories.push(catName);
-    saveState();
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Category was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
     
     document.getElementById("category-form").reset();
     renderCategoriesList();
     populateCategoryDropdowns();
 }
 
-function deleteCategory(catName) {
+async function deleteCategory(catName) {
+    if (!requirePostgresConnection("delete category")) {
+        return;
+    }
     // Check if category contains active products
     const inUse = state.products.some(p => p.category.toLowerCase() === catName.toLowerCase());
     if (inUse) {
@@ -1962,13 +2112,20 @@ function deleteCategory(catName) {
 
     if (confirm(`Are you sure you want to delete category "${catName}"?`)) {
         state.categories = state.categories.filter(cat => cat !== catName);
-        saveState();
+        const saved = await saveStateOrRevert(false);
+        if (!saved) {
+            alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+            return;
+        }
         renderCategoriesList();
         populateCategoryDropdowns();
     }
 }
 
 async function resetERPDatabase() {
+    if (!requirePostgresConnection("reset database")) {
+        return;
+    }
     if (!confirm("WARNING: Reset all business data? This will permanently delete all products, categories, stock, sales, purchases, and expenses. User accounts and roles will be kept.")) {
         return;
     }
@@ -1979,26 +2136,15 @@ async function resetERPDatabase() {
             state = normalizeStateShape(await response.json());
             saveStateToLocalStorage();
             dbOnline = true;
-            alert("Business data cleared. User accounts and roles were kept. The page will now reload.");
+            alert("Business data cleared in PostgreSQL. User accounts and roles were kept. The page will now reload.");
             window.location.reload();
             return;
         }
+        alert("Reset failed on the server. PostgreSQL was not changed.");
     } catch (e) {
-        console.warn("Database reset API unavailable, clearing local storage only.", e);
+        console.error("Database reset API unavailable.", e);
+        alert("Cannot reset: API is not connected to PostgreSQL.");
     }
-
-    const currentUsers = state.users;
-    state = {
-        products: [],
-        sales: [],
-        expenses: [],
-        purchases: [],
-        categories: [],
-        users: currentUsers
-    };
-    saveStateToLocalStorage();
-    alert("Business data cleared. User accounts and roles were kept. The page will now reload.");
-    window.location.reload();
 }
 
 // ==========================================
@@ -2181,8 +2327,11 @@ function closeUserModal() {
     document.getElementById("user-modal").classList.remove("active");
 }
 
-function saveUser(event) {
+async function saveUser(event) {
     event.preventDefault();
+    if (!requirePostgresConnection("save user")) {
+        return;
+    }
     const id = document.getElementById("user-id-field").value;
     const name = document.getElementById("user-fullname").value.trim();
     const username = document.getElementById("user-username").value.trim().toLowerCase();
@@ -2245,12 +2394,19 @@ function saveUser(event) {
         }
     }
 
-    saveState(true);
+    const saved = await saveStateOrRevert(true);
+    if (!saved) {
+        alert("User was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
     closeUserModal();
     renderUsersTable();
 }
 
-function deleteUser(id) {
+async function deleteUser(id) {
+    if (!requirePostgresConnection("delete user")) {
+        return;
+    }
     const user = state.users.find(u => u.id === id);
     if (!user) return;
 
@@ -2264,7 +2420,11 @@ function deleteUser(id) {
 
     if (confirm(`Are you sure you want to delete user "${user.name}" (${user.username})?`)) {
         state.users = state.users.filter(u => u.id !== id);
-        saveState(true);
+        const saved = await saveStateOrRevert(true);
+        if (!saved) {
+            alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+            return;
+        }
         renderUsersTable();
     }
 }
@@ -2282,7 +2442,7 @@ window.onload = async function() {
         day: 'numeric'
     });
 
-    // Load from SQLite API (falls back to local storage)
+    // Load from PostgreSQL API (production requires connection)
     await loadState();
 
     // Check Login Session

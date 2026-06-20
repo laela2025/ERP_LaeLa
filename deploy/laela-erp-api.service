@@ -1,0 +1,15 @@
+[Unit]
+Description=LaeLa ERP API (PostgreSQL backend for erp.laela.online)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=sysuser
+WorkingDirectory=/home/sysuser/ERP_LaeLa
+EnvironmentFile=/home/sysuser/ERP_LaeLa/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

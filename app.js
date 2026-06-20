@@ -93,7 +93,6 @@ let dbOnline = false;
 let reconnectTimer = null;
 let saveChain = Promise.resolve();
 let lastApiError = "";
-let inwardCostEdited = false;
 
 function costPriceMatches(a, b) {
     return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
@@ -847,6 +846,18 @@ function populateInwardProductSelect() {
         });
 }
 
+function syncInwardCostFromSelection() {
+    const select = document.getElementById("inward-product-select");
+    const costInput = document.getElementById("inward-cost");
+    if (!select || !costInput) {
+        return;
+    }
+    const prod = state.products.find(p => p.id === select.value);
+    if (prod) {
+        costInput.value = prod.costPrice;
+    }
+}
+
 function openStockInwardModal() {
     if (state.products.length === 0) {
         alert("Please create a product first before performing stock inward purchases!");
@@ -855,7 +866,6 @@ function openStockInwardModal() {
 
     document.getElementById("stock-inward-form").reset();
     populateInwardProductSelect();
-    inwardCostEdited = false;
 
     const dt = new Date();
     dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
@@ -865,23 +875,10 @@ function openStockInwardModal() {
         inwardDtInput.value = nowLocal;
     }
 
-    const costInput = document.getElementById("inward-cost");
-    costInput.value = "";
-    costInput.placeholder = "Enter this purchase cost (e.g. 30)";
-    costInput.oninput = () => {
-        inwardCostEdited = true;
-    };
+    syncInwardCostFromSelection();
 
     const select = document.getElementById("inward-product-select");
-    select.onchange = function() {
-        const prod = state.products.find(p => p.id === this.value);
-        if (!prod || inwardCostEdited) {
-            return;
-        }
-        const batches = state.products.filter(p => p.sku === prod.sku).map(p => fmtCurr(p.costPrice)).join(", ");
-        costInput.placeholder = `Enter this purchase cost (existing batches: ${batches})`;
-    };
-    select.onchange();
+    select.onchange = syncInwardCostFromSelection;
 
     document.getElementById("stock-inward-modal").classList.add("active");
 }

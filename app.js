@@ -92,6 +92,7 @@ const API_BASE = (() => {
 let dbOnline = false;
 let reconnectTimer = null;
 let saveChain = Promise.resolve();
+let lastApiError = "";
 
 function costPriceMatches(a, b) {
     return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
@@ -123,13 +124,20 @@ function requirePostgresConnection(actionLabel) {
 
 async function checkApiHealth() {
     try {
-        const response = await fetch(`${API_BASE}/health`);
+        const response = await fetch(`${API_BASE}/health`, { cache: "no-store" });
         if (!response.ok) {
+            lastApiError = `Health check HTTP ${response.status}`;
             return false;
         }
         const data = await response.json();
-        return data.ok === true;
-    } catch {
+        if (data.ok !== true) {
+            lastApiError = "Health check returned not ok";
+            return false;
+        }
+        lastApiError = "";
+        return true;
+    } catch (e) {
+        lastApiError = e && e.message ? e.message : "Network error";
         return false;
     }
 }
@@ -280,15 +288,20 @@ async function persistStateImmediate(updateUsers = false) {
                 body: JSON.stringify(payload)
             });
             if (!response.ok) {
-                throw new Error(`Save failed with status ${response.status}`);
+                let detail = "";
+                try {
+                    const errJson = await response.json();
+                    detail = errJson.error || JSON.stringify(errJson);
+                } catch {
+                    detail = await response.text();
+                }
+                throw new Error(`Save failed (${response.status}): ${detail || "unknown error"}`);
             }
             saveStateToLocalStorage();
             return true;
         } catch (e) {
             console.error("Failed to save to database.", e);
-            dbOnline = false;
-            updateDatabaseStatus();
-            scheduleDatabaseReconnect();
+            lastApiError = e && e.message ? e.message : "Save failed";
             return false;
         }
     };
@@ -348,9 +361,11 @@ function updateDatabaseStatus() {
         if (bannerText) {
             const isProduction = window.location.hostname === "erp.laela.online";
             bannerText.innerHTML = isProduction
-                ? `<strong>Database not connected.</strong> The app cannot reach <code>${API_BASE}</code>. `
-                    + `Data entered in Inward Stock is <em>not</em> saved to PostgreSQL. `
-                    + `On the server, enable HTTPS on port 27015 (or fix <code>api-config.js</code>), then hard-refresh this page.`
+                ? `<strong>Database not connected.</strong> Cannot reach <code>${API_BASE}</code>. `
+                    + `${lastApiError ? `Error: ${lastApiError}. ` : ""}`
+                    + `Data is <em>not</em> saved to PostgreSQL. `
+                    + `Hard-refresh (Ctrl+F5), then test in browser console: `
+                    + `<code>fetch('${API_BASE}/health').then(r=&gt;r.json()).then(console.log)</code>`
                 : `<strong>Database not connected.</strong> Data entered now is <em>not</em> saved to the store database. `
                     + `On this PC run <code>npm start</code> in PowerShell, then open `
                     + `<a href="http://localhost:3001" style="color: inherit; font-weight: 700;">http://localhost:3001</a>.`;
@@ -846,12 +861,20 @@ async function saveStockInward(event) {
         return;
     }
     const prodId = document.getElementById("inward-product-select").value;
-    const qty = parseInt(document.getElementById("inward-qty").value) || 0;
-    const costPrice = parseFloat(document.getElementById("inward-cost").value) || 0;
+    const qty = parseInt(document.getElementById("inward-qty").value, 10);
+    const costPrice = parseFloat(document.getElementById("inward-cost").value);
     const supplier = document.getElementById("inward-supplier").value.trim() || "Supplier Wholesale Market";
     const purchaseDateTimeRaw = (document.getElementById("inward-date-time")?.value || "").trim();
     const billNumber = (document.getElementById("inward-bill-number")?.value || "").trim();
 
+    if (!Number.isFinite(qty) || qty < 1) {
+        alert("Please enter a valid quantity (minimum 1).");
+        return;
+    }
+    if (!Number.isFinite(costPrice) || costPrice < 0) {
+        alert("Please enter a valid purchase cost (0 or greater).");
+        return;
+    }
     if (!purchaseDateTimeRaw) {
         alert("Please select the purchase date & time.");
         return;
@@ -864,18 +887,19 @@ async function saveStockInward(event) {
     const purchaseDateTimeIso = purchaseDate.toISOString();
 
     const product = state.products.find(p => p.id === prodId);
-    if (!product) return;
+    if (!product) {
+        alert("Selected product not found. Refresh the page and try again.");
+        return;
+    }
 
-    // Match batch by SKU + cost price (tolerance for decimal input)
     let targetProduct = state.products.find(p => p.sku === product.sku && costPriceMatches(p.costPrice, costPrice));
     let targetProdId = prodId;
+    const createdNewBatch = !targetProduct || targetProduct.id !== prodId;
 
     if (targetProduct) {
-        // Add to existing batch
         targetProduct.stock += qty;
         targetProdId = targetProduct.id;
     } else {
-        // Create a new separate batch product entry
         const newId = "p_" + Date.now();
         targetProduct = {
             id: newId,
@@ -891,7 +915,6 @@ async function saveStockInward(event) {
         targetProdId = newId;
     }
 
-    // Log purchase/stock inward transaction
     state.purchases.push({
         id: "pur_" + Date.now(),
         dateTime: purchaseDateTimeIso,
@@ -907,13 +930,18 @@ async function saveStockInward(event) {
     });
 
     const saved = await saveStateOrRevert(false);
-    closeStockInwardModal();
-    renderStockTable();
     if (!saved) {
-        alert("Inward stock was not saved to PostgreSQL. Check API connection and try again.");
+        alert(`Inward stock was not saved to PostgreSQL.\n\n${lastApiError || "Check API connection and try again."}`);
+        updateDatabaseStatus();
         return;
     }
-    alert(`Successfully added ${qty} units to ${targetProduct.name} at cost ${fmtCurr(costPrice)}. Total stock for this batch is ${targetProduct.stock}.`);
+
+    closeStockInwardModal();
+    renderStockTable();
+    const batchNote = createdNewBatch
+        ? ` A new batch row was created for SKU ${targetProduct.sku} at cost ${fmtCurr(costPrice)}.`
+        : "";
+    alert(`Successfully saved to PostgreSQL: ${qty} units added to ${targetProduct.name}.${batchNote} Total stock for this batch: ${targetProduct.stock}.`);
 }
 
 // ==========================================

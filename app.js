@@ -1909,6 +1909,34 @@ async function deleteExpense(id) {
     }
 }
 
+async function deleteAllExpenses() {
+    if (!requirePostgresConnection("delete all expenses")) {
+        return;
+    }
+    if (state.expenses.length === 0) {
+        alert("There are no expense entries to delete.");
+        return;
+    }
+    const count = state.expenses.length;
+    if (!confirm(`Delete all ${count} expense entries? This cannot be undone.`)) {
+        return;
+    }
+    if (!confirm(`Are you sure? All ${count} expense records will be permanently removed. Expense types will be kept.`)) {
+        return;
+    }
+
+    state.expenses = [];
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert("Delete was not saved to PostgreSQL. Check API connection and try again.");
+        return;
+    }
+
+    populatePaymentModeDropdown();
+    renderExpenses();
+    alert(`All ${count} expense entries were deleted.`);
+}
+
 // ==========================================
 // 5. MRP TAG GENERATOR LOGIC
 // ==========================================

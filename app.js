@@ -188,6 +188,7 @@ async function loadState() {
         } else {
             loadStateFromLocalStorage();
         }
+        enrichPurchasesWithMrp();
         updateDatabaseStatus();
         scheduleDatabaseReconnect();
         return;
@@ -213,6 +214,7 @@ async function loadState() {
                 state = apiState;
             }
 
+            enrichPurchasesWithMrp();
             saveStateToLocalStorage();
             updateDatabaseStatus();
             return;
@@ -228,6 +230,7 @@ async function loadState() {
     } else {
         loadStateFromLocalStorage();
     }
+    enrichPurchasesWithMrp();
     updateDatabaseStatus();
     scheduleDatabaseReconnect();
 }
@@ -789,6 +792,7 @@ async function saveProduct(event) {
                 size: size,
                 qty: stock,
                 costPrice: costPrice,
+                sellingPrice: sellingPrice,
                 supplier: supplier,
                 totalOutlay: stock * costPrice
             });
@@ -962,6 +966,7 @@ async function saveStockInward(event) {
         size: targetProduct.size,
         qty: qty,
         costPrice: costPrice,
+        sellingPrice: targetProduct.sellingPrice,
         billNumber: billNumber,
         supplier: supplier,
         totalOutlay: qty * costPrice
@@ -1771,16 +1776,34 @@ function renderReportSalesTable(filteredSales) {
     });
 }
 
+function getStockBatchForPurchase(purchase, products = state.products) {
+    const byId = products.find(prod => prod.id === purchase.productId);
+    if (byId) {
+        return byId;
+    }
+    return products.find(
+        prod => prod.sku === purchase.sku && costPriceMatches(prod.costPrice, purchase.costPrice)
+    ) || null;
+}
+
 function getPurchaseMrp(purchase) {
-    const batch = state.products.find(prod => prod.id === purchase.productId);
-    if (batch && Number.isFinite(batch.sellingPrice)) {
-        return batch.sellingPrice;
+    if (Number.isFinite(purchase.sellingPrice)) {
+        return purchase.sellingPrice;
     }
-    const sameSku = state.products.find(prod => prod.sku === purchase.sku);
-    if (sameSku && Number.isFinite(sameSku.sellingPrice)) {
-        return sameSku.sellingPrice;
+    const batch = getStockBatchForPurchase(purchase);
+    return batch && Number.isFinite(batch.sellingPrice) ? batch.sellingPrice : null;
+}
+
+function enrichPurchasesWithMrp() {
+    for (const purchase of state.purchases || []) {
+        if (Number.isFinite(purchase.sellingPrice)) {
+            continue;
+        }
+        const batch = getStockBatchForPurchase(purchase);
+        if (batch && Number.isFinite(batch.sellingPrice)) {
+            purchase.sellingPrice = batch.sellingPrice;
+        }
     }
-    return null;
 }
 
 function renderReportPurchasesTable(filteredPurchases) {
@@ -1788,13 +1811,14 @@ function renderReportPurchasesTable(filteredPurchases) {
     tbody.innerHTML = "";
 
     if (filteredPurchases.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:30px; color:var(--text-muted);">No stock purchase history for selected dates.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">No stock purchase history for selected dates.</td></tr>`;
         return;
     }
 
     filteredPurchases.forEach(p => {
         const timeStr = new Date(p.dateTime).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
-        const mrp = getPurchaseMrp(p);
+        const batch = getStockBatchForPurchase(p);
+        const mrp = batch ? batch.sellingPrice : getPurchaseMrp(p);
         const mrpCell = mrp == null ? "—" : fmtCurr(mrp);
         tbody.innerHTML += `
             <tr>
@@ -1957,7 +1981,8 @@ function exportCSVReport(type) {
         filteredPurchases.forEach(p => {
             const dateStr = new Date(p.dateTime).toLocaleDateString('en-IN');
             const bill = (p.billNumber || "").replace(/"/g, '""');
-            const mrp = getPurchaseMrp(p);
+            const batch = getStockBatchForPurchase(p);
+            const mrp = batch ? batch.sellingPrice : getPurchaseMrp(p);
             csvContent += `${dateStr},"${bill}",${p.sku},"${p.productName}",${p.size},${p.qty},${p.costPrice},${mrp ?? ""},${p.totalOutlay},"${p.supplier}"\n`;
         });
     } 

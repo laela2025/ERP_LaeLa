@@ -75,6 +75,7 @@ async function initSchema() {
             size TEXT NOT NULL,
             qty INTEGER NOT NULL,
             cost_price DOUBLE PRECISION NOT NULL,
+            selling_price DOUBLE PRECISION,
             bill_number TEXT,
             supplier TEXT NOT NULL,
             total_outlay DOUBLE PRECISION NOT NULL
@@ -117,6 +118,15 @@ async function ensureSchemaCompatibility() {
     `);
     if (rows.length === 0) {
         await pool.query("ALTER TABLE purchases ADD COLUMN bill_number TEXT");
+    }
+
+    const { rows: sellingPriceCol } = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'purchases' AND column_name = 'selling_price'
+    `);
+    if (sellingPriceCol.length === 0) {
+        await pool.query("ALTER TABLE purchases ADD COLUMN selling_price DOUBLE PRECISION");
     }
 
     // Older DBs had UNIQUE(sku) — blocks same SKU at different purchase costs (stock batches)
@@ -231,9 +241,9 @@ export async function saveState(state, { updateUsers = true } = {}) {
 
         for (const purchase of state.purchases || []) {
             await client.query(
-                `INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, bill_number, supplier, total_outlay)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-                [purchase.id, purchase.dateTime, purchase.productId, purchase.productName, purchase.sku, purchase.size, purchase.qty, purchase.costPrice, purchase.billNumber ?? null, purchase.supplier, purchase.totalOutlay]
+                `INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, selling_price, bill_number, supplier, total_outlay)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                [purchase.id, purchase.dateTime, purchase.productId, purchase.productName, purchase.sku, purchase.size, purchase.qty, purchase.costPrice, purchase.sellingPrice ?? null, purchase.billNumber ?? null, purchase.supplier, purchase.totalOutlay]
             );
         }
 
@@ -290,6 +300,7 @@ export async function loadState() {
             size,
             qty,
             cost_price AS "costPrice",
+            selling_price AS "sellingPrice",
             bill_number AS "billNumber",
             supplier,
             total_outlay AS "totalOutlay"

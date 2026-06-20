@@ -74,6 +74,7 @@ function initSchema() {
             size TEXT NOT NULL,
             qty INTEGER NOT NULL,
             cost_price REAL NOT NULL,
+            selling_price REAL,
             bill_number TEXT,
             supplier TEXT NOT NULL,
             total_outlay REAL NOT NULL
@@ -114,6 +115,9 @@ function ensureSchemaCompatibility() {
         const cols = db.prepare("PRAGMA table_info(purchases)").all().map((c) => c.name);
         if (!cols.includes("bill_number")) {
             db.exec("ALTER TABLE purchases ADD COLUMN bill_number TEXT");
+        }
+        if (!cols.includes("selling_price")) {
+            db.exec("ALTER TABLE purchases ADD COLUMN selling_price REAL");
         }
     } catch (e) {
         console.warn("Schema compatibility check failed:", e);
@@ -211,8 +215,8 @@ export async function saveState(state, { updateUsers = true } = {}) {
         }
 
         const insertPurchase = db.prepare(`
-            INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, bill_number, supplier, total_outlay)
-            VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @billNumber, @supplier, @totalOutlay)
+            INSERT INTO purchases (id, date_time, product_id, product_name, sku, size, qty, cost_price, selling_price, bill_number, supplier, total_outlay)
+            VALUES (@id, @dateTime, @productId, @productName, @sku, @size, @qty, @costPrice, @sellingPrice, @billNumber, @supplier, @totalOutlay)
         `);
         for (const purchase of state.purchases || []) {
             insertPurchase.run(purchase);
@@ -267,6 +271,7 @@ export async function loadState() {
             size,
             qty,
             cost_price AS costPrice,
+            selling_price AS sellingPrice,
             bill_number AS billNumber,
             supplier,
             total_outlay AS totalOutlay

@@ -127,6 +127,10 @@ function applyLoadedState(nextState) {
     enrichPurchasesWithMrp();
     state.expenses = normalizeExpensesList(state.expenses);
     ensureExpenseCategoriesComplete();
+    if (activeTab === "billing") {
+        renderPOSProducts();
+        renderRecentPOSSales();
+    }
 }
 
 async function loadState() {
@@ -301,7 +305,7 @@ function updateDatabaseStatus() {
 
 // Router & Switching Tabs
 let activeTab = "dashboard";
-function switchTab(tabId) {
+async function switchTab(tabId) {
     // Role-based restrictions check
     const role = sessionStorage.getItem("laela_erp_active_role") || "Cashier";
     if (role === "Cashier" && (tabId === "dashboard" || tabId === "stock" || tabId === "expenses" || tabId === "reports" || tabId === "settings" || tabId === "users")) {
@@ -353,6 +357,7 @@ function switchTab(tabId) {
     } else if (tabId === "stock") {
         renderStockTable();
     } else if (tabId === "billing") {
+        await loadState();
         renderPOSProducts();
         updateCartTotals();
         renderRecentPOSSales();
@@ -1163,8 +1168,11 @@ async function processPOSCheckout() {
         return;
     }
 
+    await loadState();
+
     // 4. Render Invoice Printable Receipt
-    renderInvoiceReceipt(newSale);
+    const savedSale = state.sales.find(s => s.id === newSale.id) || newSale;
+    renderInvoiceReceipt(savedSale);
 
     // 5. Open printable modal
     document.getElementById("receipt-modal").classList.add("active");
@@ -1181,23 +1189,20 @@ function renderRecentPOSSales() {
         return;
     }
 
-    const recentSales = [...state.sales].sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime)).slice(0, 20);
+    const recentSales = [...state.sales].sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime));
     tbody.innerHTML = "";
 
     if (recentSales.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No POS sales recorded yet.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">No POS sales recorded yet.</td></tr>`;
         return;
     }
 
     recentSales.forEach(s => {
         const timeStr = new Date(s.dateTime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-        const itemCount = s.items.reduce((sum, item) => sum + item.quantity, 0);
         tbody.innerHTML += `
             <tr>
                 <td><strong>${s.invoiceNumber}</strong></td>
                 <td>${timeStr}</td>
-                <td>${s.customerName}</td>
-                <td><span class="badge badge-info">${itemCount} items</span></td>
                 <td style="font-weight:700; color:var(--primary);">${fmtCurr(s.grandTotal)}</td>
                 <td style="white-space:nowrap;">
                     <button class="btn btn-secondary btn-sm btn-icon" onclick="reprintReceiptFromReport('${s.id}')" title="Reprint receipt">
@@ -2265,6 +2270,8 @@ async function deleteSale(saleId) {
         alert(`Could not delete sale.\n\n${lastApiError || "Check API connection and try again."}`);
         return;
     }
+
+    await loadState();
 
     if (activeTab === "reports") {
         runFinancialReports();

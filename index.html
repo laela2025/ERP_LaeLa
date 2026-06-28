@@ -319,6 +319,28 @@
                             <div class="pos-cart-items" id="pos-cart-items-container">
                                 <!-- Dynamic cart items -->
                             </div>
+
+                            <div class="pos-recent-sales-panel">
+                                <div class="pos-recent-sales-header">
+                                    <h4>Recent POS Sales</h4>
+                                    <span class="pos-recent-sales-hint">Void to restore stock</span>
+                                </div>
+                                <div class="pos-recent-sales-scroll">
+                                    <table class="app-table pos-recent-sales-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Invoice</th>
+                                                <th>Time</th>
+                                                <th>Total</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pos-recent-sales-tbody">
+                                            <!-- Dynamic POS sales -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                             
                             <div class="pos-cart-summary">
                                 <div class="form-group">
@@ -376,30 +398,6 @@
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="card" style="margin-top: 24px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                            <h3>Recent POS Sales</h3>
-                            <span style="font-size:0.85rem; color:var(--text-muted);">Delete a sale to restore stock and remove it from reports.</span>
-                        </div>
-                        <div class="table-container" style="max-height: 320px;">
-                            <table class="app-table">
-                                <thead>
-                                    <tr>
-                                        <th>Invoice</th>
-                                        <th>Date & Time</th>
-                                        <th>Customer</th>
-                                        <th>Items</th>
-                                        <th>Total</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pos-recent-sales-tbody">
-                                    <!-- Dynamic POS sales -->
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </section>

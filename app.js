@@ -355,6 +355,7 @@ function switchTab(tabId) {
     } else if (tabId === "billing") {
         renderPOSProducts();
         updateCartTotals();
+        renderRecentPOSSales();
     } else if (tabId === "expenses") {
         renderExpenses();
         populateExpenseCategoryDropdown();
@@ -1171,6 +1172,44 @@ async function processPOSCheckout() {
     // 6. Reset POS Cart
     clearPOSCart();
     renderPOSProducts();
+    renderRecentPOSSales();
+}
+
+function renderRecentPOSSales() {
+    const tbody = document.getElementById("pos-recent-sales-tbody");
+    if (!tbody) {
+        return;
+    }
+
+    const recentSales = [...state.sales].sort((a, b) => new Date(b.dateTime) - new Date(a.dateTime)).slice(0, 20);
+    tbody.innerHTML = "";
+
+    if (recentSales.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No POS sales recorded yet.</td></tr>`;
+        return;
+    }
+
+    recentSales.forEach(s => {
+        const timeStr = new Date(s.dateTime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const itemCount = s.items.reduce((sum, item) => sum + item.quantity, 0);
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${s.invoiceNumber}</strong></td>
+                <td>${timeStr}</td>
+                <td>${s.customerName}</td>
+                <td><span class="badge badge-info">${itemCount} items</span></td>
+                <td style="font-weight:700; color:var(--primary);">${fmtCurr(s.grandTotal)}</td>
+                <td style="white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="reprintReceiptFromReport('${s.id}')" title="Reprint receipt">
+                        <i class="fa-solid fa-print"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteSale('${s.id}')" title="Delete sale">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
 }
 
 function renderInvoiceReceipt(sale) {
@@ -2182,14 +2221,61 @@ function renderReportSalesTable(filteredSales) {
                 <td style="font-weight:700; color:var(--primary);">${fmtCurr(s.grandTotal)}</td>
                 <td>${fmtCurr(s.cogs)}</td>
                 <td style="font-weight:700; color:var(--secondary);">${fmtCurr(s.profit)}</td>
-                <td>
-                    <button class="btn btn-secondary btn-sm" onclick="reprintReceiptFromReport('${s.id}')">
-                        <i class="fa-solid fa-print"></i> Receipt
+                <td style="white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="reprintReceiptFromReport('${s.id}')" title="Reprint receipt">
+                        <i class="fa-solid fa-print"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteSale('${s.id}')" title="Delete sale">
+                        <i class="fa-solid fa-trash"></i>
                     </button>
                 </td>
             </tr>
         `;
     });
+}
+
+async function deleteSale(saleId) {
+    if (!requirePostgresConnection("delete sale")) {
+        return;
+    }
+
+    const sale = state.sales.find(s => s.id === saleId);
+    if (!sale) {
+        alert("Sale not found. Refresh the page and try again.");
+        return;
+    }
+
+    const dateStr = new Date(sale.dateTime).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const itemSummary = sale.items.map(item => `${item.name} × ${item.quantity}`).join(", ");
+    if (!confirm(`Delete this POS sale?\n\nInvoice: ${sale.invoiceNumber}\nDate: ${dateStr}\nCustomer: ${sale.customerName}\nTotal: ${fmtCurr(sale.grandTotal)}\nItems: ${itemSummary}\n\nStock will be restored for sold items. This cannot be undone.`)) {
+        return;
+    }
+
+    sale.items.forEach(item => {
+        const product = state.products.find(p => p.id === item.productId);
+        if (product) {
+            product.stock += item.quantity;
+        }
+    });
+
+    state.sales = state.sales.filter(s => s.id !== saleId);
+
+    const saved = await saveStateOrRevert(false);
+    if (!saved) {
+        alert(`Could not delete sale.\n\n${lastApiError || "Check API connection and try again."}`);
+        return;
+    }
+
+    if (activeTab === "reports") {
+        runFinancialReports();
+    } else if (activeTab === "dashboard") {
+        renderDashboard();
+    } else if (activeTab === "billing") {
+        renderPOSProducts();
+        renderRecentPOSSales();
+    } else if (activeTab === "stock") {
+        renderStockTable();
+    }
 }
 
 function getStockBatchForPurchase(purchase, products = state.products) {

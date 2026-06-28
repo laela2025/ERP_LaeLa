@@ -378,6 +378,30 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="card" style="margin-top: 24px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <h3>Recent POS Sales</h3>
+                            <span style="font-size:0.85rem; color:var(--text-muted);">Delete a sale to restore stock and remove it from reports.</span>
+                        </div>
+                        <div class="table-container" style="max-height: 320px;">
+                            <table class="app-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice</th>
+                                        <th>Date & Time</th>
+                                        <th>Customer</th>
+                                        <th>Items</th>
+                                        <th>Total</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pos-recent-sales-tbody">
+                                    <!-- Dynamic POS sales -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- 4. EXPENSES TRACKER VIEW -->
